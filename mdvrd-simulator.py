@@ -15,6 +15,7 @@ import functools
 import uuid
 import random
 import math
+import addict
 
 class Router:
 
@@ -26,16 +27,28 @@ class Router:
         self.pos_y = random.randint(0, 1000)
         self.time = 0
         self._init_terminals
+        self.terminals = addict.Dict()
 
     def _init_terminals(self):
         for t in self.ti:
-            pass
+            self.terminals[t['type']] = addict.Dict()
+            self.terminals[t['type']].connections = dict()
 
-    def connect(self, dist, router_id):
-        print("from {} to {} - {} m".format(self.id, self.router_id, dist))
+    def dist_update(self, dist, other):
+        """connect is just information base on distance
+           path loss or other effects are modeled afterwards"""
         for v in self.ti:
-            if v["type"] == type:
-                v["connections"] = router_id
+            t = v['type']
+            max_range = v['range']
+            if dist <= max_range:
+                print("{} in range:     {} to {} - {} m".format(t, self.id, other.id, dist))
+                self.terminals[t].connections[other.id] = other
+            else:
+                print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
+                if other.id in self.terminals[t].connections:
+                    del self.terminals[t].connections[other.id]
+
+
 
     def pos(self):
         return self.pos_x, self.pos_y
@@ -52,11 +65,11 @@ def rand_ip_prefix():
 	return c
 
 def main():
-    NO_ROUTER = 100
+    NO_ROUTER = 50
     NO_TERMINALS = 3
 
-    ti = [ {"type": "wb", "range" : 50, "bandwidth" : 5000},
-           {"type": "nb", "range" : 100, "bandwidth" : 1000 } ]
+    ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
+           {"type": "nb", "range" : 250, "bandwidth" : 1000 } ]
 
     r = dict()
     for i in range(NO_ROUTER):
@@ -70,7 +83,7 @@ def main():
             i_pos = r[i].pos()
             j_pos = r[j].pos()
             dist = math.hypot(i_pos[1] - j_pos[1], i_pos[0] - j_pos[0])
-            r[j].connect(dist, i)
+            r[j].dist_update(dist, r[i])
 
 
 
