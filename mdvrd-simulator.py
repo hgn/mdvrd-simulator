@@ -18,7 +18,6 @@ import addict
 import cairo
 
 
-
 NO_ROUTER = 50
 
 SIMULATION_TIME_SEC = 60 * 60
@@ -28,6 +27,8 @@ TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 
 SIMU_AREA_X = 1000
 SIMU_AREA_Y = 1000
+
+random.seed(1)
 
 class Router:
 
@@ -119,16 +120,24 @@ class Router:
                     del self.terminals[t].connections[other.id]
 
     def receive(self, sender, packet):
-        pass
-        #print("receive packet from {}".format(sender.id))
+        print("{} receive packet from {}".format(self.id, sender.id))
+        pprint.pprint(packet)
+
+    def create_packet(self):
+        packet = dict()
+        packet['router-id'] = self.id
+        packet['networks'] = list()
+        packet['networks'].append({"prefix" : self.prefix})
+        return packet
 
     def _transmit(self):
         #print("{} transmit data".format(self.id))
         for v in self.ti:
             t = v['type']
             for other_id, other_router in self.terminals[t].connections.items():
+                """ this is the multicast packet transmission process """
                 #print(" to router {} [{}]".format(other_id, t))
-                packet = {}
+                packet = self.create_packet()
                 other_router.receive(self, packet)
 
 
