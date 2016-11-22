@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-
 import time
 import sys
 import os
@@ -17,6 +16,10 @@ import random
 import math
 import addict
 
+
+
+NO_ROUTER = 50
+
 SIMULATION_TIME_SEC = 60 * 60
 
 TX_INTERVAL = 30
@@ -27,7 +30,7 @@ SIMU_AREA_Y = 1000
 
 class Router:
 
-    class MoveModel:
+    class MovementModel:
 
         LEFT = 1
         RIGHT = 2
@@ -40,15 +43,15 @@ class Router:
             self.velocity = random.randint(1, 1)
 
         def _move_x(self, x):
-            if self.direction_x == MoveModel.LEFT:
+            if self.direction_x == Router.MovementModel.LEFT:
                 x -= self.velocity
                 if x <= 0:
-                    self.direction_x = MoveModel.RIGHT
+                    self.direction_x = Router.MovementModel.RIGHT
                     x = 0
-            elif self.direction_x == MoveModel.RIGHT:
+            elif self.direction_x == Router.MovementModel.RIGHT:
                 x += self.velocity
                 if x >= SIMU_AREA_X:
-                    self.direction_x = MoveModel.LEFT
+                    self.direction_x = Router.MovementModel.LEFT
                     x = SIMU_AREA_X
             else:
                 # none, so no x movement at all
@@ -56,15 +59,15 @@ class Router:
             return x
 
         def _move_y(self, y):
-            if self.direction_y == MoveModel.DOWNWARDS:
+            if self.direction_y == Router.MovementModel.DOWNWARDS:
                 y -= self.velocity
                 if y <= 0:
-                    self.direction_y = MoveModel.UPWARDS
+                    self.direction_y = Router.MovementModel.UPWARDS
                     y = 0
-            elif self.direction_y == MoveModel.UPWARDS:
+            elif self.direction_y == Router.MovementModel.UPWARDS:
                 y += self.velocity
                 if y >= SIMU_AREA_Y:
-                    self.direction_x = MoveModel.DOWNWARDS
+                    self.direction_x = Router.MovementModel.DOWNWARDS
                     y = SIMU_AREA_Y
             else:
                 # none, so no x movement at all
@@ -76,6 +79,7 @@ class Router:
             y = self._move_x(y)
             return x, y
 
+
     def __init__(self, id, ti, prefix):
         self.id = id
         self.ti = ti
@@ -86,6 +90,7 @@ class Router:
         self._init_terminals
         self.terminals = addict.Dict()
         self._calc_next_tx_time()
+        self.mm = Router.MovementModel()
 
 
     def _calc_next_tx_time(self):
@@ -130,6 +135,7 @@ class Router:
 
     def step(self):
         self.time += 1
+        self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
         if self.time == self._next_tx_time:
             self._transmit()
             self._calc_next_tx_time()
@@ -142,9 +148,16 @@ def rand_ip_prefix():
 	c = "{}.{}.{}.0/24".format(b[0], b[1], b[2])
 	return c
 
-def main():
-    NO_ROUTER = 50
+def dist_update_all(r):
+    for i in range(NO_ROUTER):
+        for j in range(NO_ROUTER):
+            if i == j: continue
+            i_pos = r[i].pos()
+            j_pos = r[j].pos()
+            dist = math.hypot(i_pos[1] - j_pos[1], i_pos[0] - j_pos[0])
+            r[j].dist_update(dist, r[i])
 
+def main():
     ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
            {"type": "nb", "range" : 150, "bandwidth" : 1000 } ]
 
@@ -155,18 +168,13 @@ def main():
         r[i] = Router(i, ti, prefix)
 
     # initial positioning
-    for i in range(NO_ROUTER):
-        for j in range(NO_ROUTER):
-            if i == j: continue
-            i_pos = r[i].pos()
-            j_pos = r[j].pos()
-            dist = math.hypot(i_pos[1] - j_pos[1], i_pos[0] - j_pos[0])
-            r[j].dist_update(dist, r[i])
+    dist_update_all(r)
 
 
     for sec in range(SIMULATION_TIME_SEC):
         for i in range(NO_ROUTER):
             r[i].step()
+        dist_update_all(r)
 
 
 if __name__ == '__main__':
