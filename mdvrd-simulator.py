@@ -17,6 +17,9 @@ import random
 import math
 import addict
 
+TX_INTERVAL = 30
+TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
+
 class Router:
 
     def __init__(self, id, ti, prefix):
@@ -28,6 +31,12 @@ class Router:
         self.time = 0
         self._init_terminals
         self.terminals = addict.Dict()
+        self._calc_next_tx_time()
+
+
+    def _calc_next_tx_time(self):
+            self._next_tx_time = self.time + TX_INTERVAL + random.randint(0, TX_INTERVAL_JITTER)
+
 
     def _init_terminals(self):
         for t in self.ti:
@@ -36,7 +45,8 @@ class Router:
 
     def dist_update(self, dist, other):
         """connect is just information base on distance
-           path loss or other effects are modeled afterwards"""
+           path loss or other effects are modeled afterwards.
+           This models the PHY channel somehow."""
         for v in self.ti:
             t = v['type']
             max_range = v['range']
@@ -48,6 +58,17 @@ class Router:
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
 
+    def receive(self, sender, packet):
+        print("receive packet from {}".format(sender.id))
+
+    def _transmit(self):
+        #print("{} transmit data".format(self.id))
+        for v in self.ti:
+            t = v['type']
+            for other_id, other_router in self.terminals[t].connections.items():
+                #print(" to router {} [{}]".format(other_id, t))
+                packet = {}
+                other_router.receive(self, packet)
 
 
     def pos(self):
@@ -55,6 +76,9 @@ class Router:
 
     def step(self):
         self.time += 1
+        if self.time == self._next_tx_time:
+            self._transmit()
+            self._calc_next_tx_time()
 
 
 def rand_ip_prefix():
@@ -69,7 +93,7 @@ def main():
     NO_TERMINALS = 3
 
     ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
-           {"type": "nb", "range" : 250, "bandwidth" : 1000 } ]
+           {"type": "nb", "range" : 150, "bandwidth" : 1000 } ]
 
     r = dict()
     for i in range(NO_ROUTER):
