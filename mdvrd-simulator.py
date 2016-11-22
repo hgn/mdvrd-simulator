@@ -17,17 +17,71 @@ import random
 import math
 import addict
 
+SIMULATION_TIME_SEC = 60 * 60
+
 TX_INTERVAL = 30
 TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 
+SIMU_AREA_X = 1000
+SIMU_AREA_Y = 1000
+
 class Router:
+
+    class MoveModel:
+
+        LEFT = 1
+        RIGHT = 2
+        UPWARDS = 1
+        DOWNWARDS = 2
+
+        def __init__(self):
+            self.direction_x = random.randint(0, 2)
+            self.direction_y = random.randint(0, 2)
+            self.velocity = random.randint(1, 1)
+
+        def _move_x(self, x):
+            if self.direction_x == MoveModel.LEFT:
+                x -= self.velocity
+                if x <= 0:
+                    self.direction_x = MoveModel.RIGHT
+                    x = 0
+            elif self.direction_x == MoveModel.RIGHT:
+                x += self.velocity
+                if x >= SIMU_AREA_X:
+                    self.direction_x = MoveModel.LEFT
+                    x = SIMU_AREA_X
+            else:
+                # none, so no x movement at all
+                pass
+            return x
+
+        def _move_y(self, y):
+            if self.direction_y == MoveModel.DOWNWARDS:
+                y -= self.velocity
+                if y <= 0:
+                    self.direction_y = MoveModel.UPWARDS
+                    y = 0
+            elif self.direction_y == MoveModel.UPWARDS:
+                y += self.velocity
+                if y >= SIMU_AREA_Y:
+                    self.direction_x = MoveModel.DOWNWARDS
+                    y = SIMU_AREA_Y
+            else:
+                # none, so no x movement at all
+                pass
+            return y
+
+        def move(self, x, y):
+            x = self._move_x(x)
+            y = self._move_x(y)
+            return x, y
 
     def __init__(self, id, ti, prefix):
         self.id = id
         self.ti = ti
         self.prefix = prefix
-        self.pos_x = random.randint(0, 1000)
-        self.pos_y = random.randint(0, 1000)
+        self.pos_x = random.randint(0, SIMU_AREA_X)
+        self.pos_y = random.randint(0, SIMU_AREA_Y)
         self.time = 0
         self._init_terminals
         self.terminals = addict.Dict()
@@ -90,7 +144,6 @@ def rand_ip_prefix():
 
 def main():
     NO_ROUTER = 50
-    NO_TERMINALS = 3
 
     ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
            {"type": "nb", "range" : 150, "bandwidth" : 1000 } ]
@@ -101,6 +154,7 @@ def main():
         print(prefix)
         r[i] = Router(i, ti, prefix)
 
+    # initial positioning
     for i in range(NO_ROUTER):
         for j in range(NO_ROUTER):
             if i == j: continue
@@ -110,8 +164,7 @@ def main():
             r[j].dist_update(dist, r[i])
 
 
-
-    for sec in range(60*60):
+    for sec in range(SIMULATION_TIME_SEC):
         for i in range(NO_ROUTER):
             r[i].step()
 
