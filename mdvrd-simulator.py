@@ -15,6 +15,7 @@ import uuid
 import random
 import math
 import addict
+import cairo
 
 
 
@@ -76,7 +77,7 @@ class Router:
 
         def move(self, x, y):
             x = self._move_x(x)
-            y = self._move_x(y)
+            y = self._move_y(y)
             return x, y
 
 
@@ -110,15 +111,16 @@ class Router:
             t = v['type']
             max_range = v['range']
             if dist <= max_range:
-                print("{} in range:     {} to {} - {} m".format(t, self.id, other.id, dist))
+                #print("{} in range:     {} to {} - {} m".format(t, self.id, other.id, dist))
                 self.terminals[t].connections[other.id] = other
             else:
-                print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
+                #print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
 
     def receive(self, sender, packet):
-        print("receive packet from {}".format(sender.id))
+        pass
+        #print("receive packet from {}".format(sender.id))
 
     def _transmit(self):
         #print("{} transmit data".format(self.id))
@@ -157,6 +159,13 @@ def dist_update_all(r):
             dist = math.hypot(i_pos[1] - j_pos[1], i_pos[0] - j_pos[0])
             r[j].dist_update(dist, r[i])
 
+def draw_router_loc(ctx, x, y):
+    ctx.set_line_width(0.5)
+    ctx.set_source_rgb(0.5, 1, 0.5)
+    ctx.move_to(x, y)
+    ctx.arc(x, y, 5, 5, 2 * math.pi)
+    ctx.fill()
+
 def main():
     ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
            {"type": "nb", "range" : 150, "bandwidth" : 1000 } ]
@@ -170,11 +179,20 @@ def main():
     # initial positioning
     dist_update_all(r)
 
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx = cairo.Context(surface)
+    #ctx.scale(SIMU_AREA_X, SIMU_AREA_Y)
+    ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx.set_source_rgb(0.95, 0.95, 0.95) 
+    ctx.fill()
 
     for sec in range(SIMULATION_TIME_SEC):
         for i in range(NO_ROUTER):
             r[i].step()
+            draw_router_loc(ctx, r[i].pos_x, r[i].pos_y)
         dist_update_all(r)
+
+    surface.write_to_png('map.png')
 
 
 if __name__ == '__main__':
