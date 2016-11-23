@@ -32,7 +32,7 @@ random.seed(1)
 
 class Router:
 
-    class MovementModel:
+    class MobilityModel:
 
         LEFT = 1
         RIGHT = 2
@@ -45,15 +45,15 @@ class Router:
             self.velocity = random.randint(1, 1)
 
         def _move_x(self, x):
-            if self.direction_x == Router.MovementModel.LEFT:
+            if self.direction_x == Router.MobilityModel.LEFT:
                 x -= self.velocity
                 if x <= 0:
-                    self.direction_x = Router.MovementModel.RIGHT
+                    self.direction_x = Router.MobilityModel.RIGHT
                     x = 0
-            elif self.direction_x == Router.MovementModel.RIGHT:
+            elif self.direction_x == Router.MobilityModel.RIGHT:
                 x += self.velocity
                 if x >= SIMU_AREA_X:
-                    self.direction_x = Router.MovementModel.LEFT
+                    self.direction_x = Router.MobilityModel.LEFT
                     x = SIMU_AREA_X
             else:
                 # none, so no x movement at all
@@ -61,15 +61,15 @@ class Router:
             return x
 
         def _move_y(self, y):
-            if self.direction_y == Router.MovementModel.DOWNWARDS:
+            if self.direction_y == Router.MobilityModel.DOWNWARDS:
                 y -= self.velocity
                 if y <= 0:
-                    self.direction_y = Router.MovementModel.UPWARDS
+                    self.direction_y = Router.MobilityModel.UPWARDS
                     y = 0
-            elif self.direction_y == Router.MovementModel.UPWARDS:
+            elif self.direction_y == Router.MobilityModel.UPWARDS:
                 y += self.velocity
                 if y >= SIMU_AREA_Y:
-                    self.direction_x = Router.MovementModel.DOWNWARDS
+                    self.direction_x = Router.MobilityModel.DOWNWARDS
                     y = SIMU_AREA_Y
             else:
                 # none, so no x movement at all
@@ -92,7 +92,7 @@ class Router:
         self._init_terminals
         self.terminals = addict.Dict()
         self._calc_next_tx_time()
-        self.mm = Router.MovementModel()
+        self.mm = Router.MobilityModel()
 
 
     def _calc_next_tx_time(self):
