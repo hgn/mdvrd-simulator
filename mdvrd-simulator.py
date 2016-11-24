@@ -93,6 +93,7 @@ class Router:
         self.terminals = addict.Dict()
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
+        self.route_rx_data = dict()
 
 
     def _calc_next_tx_time(self):
@@ -101,15 +102,15 @@ class Router:
 
     def _init_terminals(self):
         for t in self.ti:
-            self.terminals[t['type']] = addict.Dict()
-            self.terminals[t['type']].connections = dict()
+            self.terminals[t['path_type']] = addict.Dict()
+            self.terminals[t['path_type']].connections = dict()
 
     def dist_update(self, dist, other):
         """connect is just information base on distance
            path loss or other effects are modeled afterwards.
            This models the PHY channel somehow."""
         for v in self.ti:
-            t = v['type']
+            t = v['path_type']
             max_range = v['range']
             if dist <= max_range:
                 #print("{} in range:     {} to {} - {} m".format(t, self.id, other.id, dist))
@@ -123,7 +124,7 @@ class Router:
         print("{} receive packet from {}".format(self.id, sender.id))
         pprint.pprint(packet)
 
-    def create_packet(self):
+    def create_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
         packet['networks'] = list()
@@ -133,11 +134,11 @@ class Router:
     def _transmit(self):
         #print("{} transmit data".format(self.id))
         for v in self.ti:
-            t = v['type']
-            for other_id, other_router in self.terminals[t].connections.items():
+            pt = v['path_type']
+            for other_id, other_router in self.terminals[pt].connections.items():
                 """ this is the multicast packet transmission process """
                 #print(" to router {} [{}]".format(other_id, t))
-                packet = self.create_packet()
+                packet = self.create_packet(pt)
                 other_router.receive(self, packet)
 
 
@@ -176,8 +177,8 @@ def draw_router_loc(ctx, x, y):
     ctx.fill()
 
 def main():
-    ti = [ {"type": "wb", "range" : 100, "bandwidth" : 5000},
-           {"type": "nb", "range" : 150, "bandwidth" : 1000 } ]
+    ti = [ {"path_type": "wb", "range" : 100, "bandwidth" : 5000},
+           {"path_type": "nb", "range" : 150, "bandwidth" : 1000 } ]
 
     r = dict()
     for i in range(NO_ROUTER):
