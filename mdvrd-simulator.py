@@ -16,9 +16,10 @@ import random
 import math
 import addict
 import cairo
+import shutil
 
 
-NO_ROUTER = 50
+NO_ROUTER = 30
 
 SIMULATION_TIME_SEC = 60 * 60
 
@@ -56,23 +57,21 @@ class Router:
                     self.direction_x = Router.MobilityModel.LEFT
                     x = SIMU_AREA_X
             else:
-                # none, so no x movement at all
                 pass
             return x
 
         def _move_y(self, y):
             if self.direction_y == Router.MobilityModel.DOWNWARDS:
-                y -= self.velocity
-                if y <= 0:
-                    self.direction_y = Router.MobilityModel.UPWARDS
-                    y = 0
-            elif self.direction_y == Router.MobilityModel.UPWARDS:
                 y += self.velocity
                 if y >= SIMU_AREA_Y:
-                    self.direction_x = Router.MobilityModel.DOWNWARDS
+                    self.direction_y = Router.MobilityModel.UPWARDS
                     y = SIMU_AREA_Y
+            elif self.direction_y == Router.MobilityModel.UPWARDS:
+                y -= self.velocity
+                if y <= 0:
+                    self.direction_y = Router.MobilityModel.DOWNWARDS
+                    y = 0
             else:
-                # none, so no x movement at all
                 pass
             return y
 
@@ -113,22 +112,27 @@ class Router:
             t = v['path_type']
             max_range = v['range']
             if dist <= max_range:
-                #print("{} in range:     {} to {} - {} m".format(t, self.id, other.id, dist))
+                print("{} in range:     {} to {} - {} m via {}".format(t, self.id, other.id, dist, t))
                 self.terminals[t].connections[other.id] = other
+                pprint.pprint(self.terminals[t].connections[other.id])
+                for k,v in self.terminals[t].connections.items():
+                    print(k)
             else:
-                #print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
+                print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
 
     def receive(self, sender, packet):
         print("{} receive packet from {}".format(self.id, sender.id))
+        print("  path_type: {}\n".format(packet['path_type']))
         pprint.pprint(packet)
 
     def create_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
+        packet['path_type'] = path_type
         packet['networks'] = list()
-        packet['networks'].append({"prefix" : self.prefix})
+        packet['networks'].append({"v4-prefix" : self.prefix})
         return packet
 
     def _transmit(self):
@@ -169,14 +173,71 @@ def dist_update_all(r):
             dist = math.hypot(i_pos[1] - j_pos[1], i_pos[0] - j_pos[0])
             r[j].dist_update(dist, r[i])
 
-def draw_router_loc(ctx, x, y):
-    ctx.set_line_width(0.5)
-    ctx.set_source_rgb(0.5, 1, 0.5)
-    ctx.move_to(x, y)
-    ctx.arc(x, y, 5, 5, 2 * math.pi)
+
+def draw_router_loc(r, path, img_idx):
+    c_links = { 'nb' : (1.0, 0.15, 0.15, 1.0),  'wb' :(0.15, 1.0, 0.15, 1.0)}
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx = cairo.Context(surface)
+    ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0) 
     ctx.fill()
 
+
+    for i in range(NO_ROUTER):
+        router = r[i]
+        x = router.pos_x
+        y = router.pos_y
+
+        color = ((1.0, 1.0, 0.5, 0.05), (1.0, 0.0, 1.0, 0.05))
+        ctx.set_line_width(0.1)
+        path_thinkness = 4.0
+        # iterate over links
+        for i, t in enumerate(router.ti):
+            range_ = t['range']
+            path_type = t['path_type']
+            ctx.set_source_rgba(*color[i])
+            ctx.move_to(x, y)
+            ctx.arc(x, y, range_, 0, 2 * math.pi)
+            ctx.fill()
+
+            # draw lines between links
+            ctx.set_line_width(path_thinkness)
+            for r_id, other in router.terminals[t['path_type']].connections.items():
+                other_x, other_y = other.pos_x, other.pos_y
+                ctx.move_to(x, y)
+                ctx.set_source_rgba(*c_links[path_type])
+                ctx.line_to(other_x, other_y)
+                ctx.stroke()
+
+            path_thinkness -= 2.0
+
+        # node middle point
+        ctx.set_line_width(0.0)
+        ctx.set_source_rgb(0.5, 1, 0.5)
+        ctx.move_to(x, y)
+        ctx.arc(x, y, 5, 0, 2 * math.pi)
+        ctx.fill()
+
+        ctx.set_font_size(10)
+        ctx.set_source_rgb(0.5, 1, 0.7)
+        ctx.move_to(x + 10, y + 10)
+        ctx.show_text(str(router.id))
+        ctx.stroke()
+
+
+    full_path = os.path.join(path, "{0:05}.png".format(img_idx))
+    surface.write_to_png(full_path)
+
+def setup_img_folder():
+    path = "images-router-path-ranges"
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
+    return path
+
 def main():
+    img_path = setup_img_folder()
+
     ti = [ {"path_type": "wb", "range" : 100, "bandwidth" : 5000},
            {"path_type": "nb", "range" : 150, "bandwidth" : 1000 } ]
 
@@ -189,20 +250,11 @@ def main():
     # initial positioning
     dist_update_all(r)
 
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
-    ctx = cairo.Context(surface)
-    #ctx.scale(SIMU_AREA_X, SIMU_AREA_Y)
-    ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
-    ctx.set_source_rgb(0.95, 0.95, 0.95) 
-    ctx.fill()
-
     for sec in range(SIMULATION_TIME_SEC):
         for i in range(NO_ROUTER):
             r[i].step()
-            draw_router_loc(ctx, r[i].pos_x, r[i].pos_y)
         dist_update_all(r)
-
-    surface.write_to_png('map.png')
+        draw_router_loc(r, img_path, sec)
 
 
 if __name__ == '__main__':
