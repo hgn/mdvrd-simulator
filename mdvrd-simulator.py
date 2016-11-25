@@ -19,7 +19,7 @@ import cairo
 import shutil
 
 
-NO_ROUTER = 30
+NO_ROUTER = 100
 
 SIMULATION_TIME_SEC = 60 * 60
 
@@ -112,20 +112,24 @@ class Router:
             t = v['path_type']
             max_range = v['range']
             if dist <= max_range:
-                print("{} in range:     {} to {} - {} m via {}".format(t, self.id, other.id, dist, t))
+                #print("{} in range:     {} to {} - {} m via {}".format(t, self.id, other.id, dist, t))
                 self.terminals[t].connections[other.id] = other
-                pprint.pprint(self.terminals[t].connections[other.id])
-                for k,v in self.terminals[t].connections.items():
-                    print(k)
             else:
-                print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
+                #print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
+
+    def _rx_save_data(self, sender, packet):
+        if not sender in self.route_rx_data:
+            self.route_rx_data[sender] = dict()
+            self.route_rx_data[sender][packet['path_type']] = dict()
+            self.route_rx_data[sender][packet['path_type']]['rx-time'] = self.time
 
     def receive(self, sender, packet):
         print("{} receive packet from {}".format(self.id, sender.id))
         print("  path_type: {}\n".format(packet['path_type']))
-        pprint.pprint(packet)
+        #pprint.pprint(packet)
+        self._rx_save_data(sender, packet)
 
     def create_packet(self, path_type):
         packet = dict()
@@ -218,11 +222,17 @@ def draw_router_loc(r, path, img_idx):
         ctx.arc(x, y, 5, 0, 2 * math.pi)
         ctx.fill()
 
+        # router id
         ctx.set_font_size(10)
         ctx.set_source_rgb(0.5, 1, 0.7)
         ctx.move_to(x + 10, y + 10)
         ctx.show_text(str(router.id))
-        ctx.stroke()
+
+        # router IP prefix
+        ctx.set_font_size(8)
+        ctx.set_source_rgba(0.5, 1, 0.7, 0.5)
+        ctx.move_to(x + 10, y + 20)
+        ctx.show_text(router.prefix)
 
 
     full_path = os.path.join(path, "{0:05}.png".format(img_idx))
@@ -251,6 +261,7 @@ def main():
     dist_update_all(r)
 
     for sec in range(SIMULATION_TIME_SEC):
+        print("time:{} of:{}".format(sec, SIMULATION_TIME_SEC))
         for i in range(NO_ROUTER):
             r[i].step()
         dist_update_all(r)
