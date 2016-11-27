@@ -367,6 +367,9 @@ def main():
         dist_update_all(r)
         draw_images(r, sec)
 
+    cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4"
+    print("now execute \"{}\" to generate a video".format(cmd))
+
 
 if __name__ == '__main__':
     main()
