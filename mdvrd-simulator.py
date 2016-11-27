@@ -17,6 +17,8 @@ import math
 import addict
 import cairo
 import shutil
+from PIL import Image
+
 
 
 NO_ROUTER = 100
@@ -26,8 +28,9 @@ SIMULATION_TIME_SEC = 60 * 60
 TX_INTERVAL = 30
 TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 
-SIMU_AREA_X = 1000
-SIMU_AREA_Y = 1000
+# two stiched images result in 1080p resoltion
+SIMU_AREA_X = 960
+SIMU_AREA_Y = 1080
 
 random.seed(1)
 
@@ -93,6 +96,7 @@ class Router:
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
         self.route_rx_data = dict()
+        self.transmitted_now = False
 
 
     def _calc_next_tx_time(self):
@@ -159,6 +163,9 @@ class Router:
         if self.time == self._next_tx_time:
             self._transmit()
             self._calc_next_tx_time()
+            self.transmitted_now = True
+        else:
+            self.transmitted_now = False
 
 
 def rand_ip_prefix():
@@ -185,7 +192,6 @@ def draw_router_loc(r, path, img_idx):
     ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
     ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0) 
     ctx.fill()
-
 
     for i in range(NO_ROUTER):
         router = r[i]
@@ -215,6 +221,11 @@ def draw_router_loc(r, path, img_idx):
 
             path_thinkness -= 2.0
 
+    for i in range(NO_ROUTER):
+        router = r[i]
+        x = router.pos_x
+        y = router.pos_y
+
         # node middle point
         ctx.set_line_width(0.0)
         ctx.set_source_rgb(0.5, 1, 0.5)
@@ -234,19 +245,108 @@ def draw_router_loc(r, path, img_idx):
         ctx.move_to(x + 10, y + 20)
         ctx.show_text(router.prefix)
 
+    full_path = os.path.join(path, "{0:05}.png".format(img_idx))
+    surface.write_to_png(full_path)
+
+
+def draw_router_transmission(r, path, img_idx):
+    c_links = { 'nb' : (.0, .0, .0, .4),  'wb' :(.0, .0, .0, .4)}
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx = cairo.Context(surface)
+    ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
+    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0) 
+    ctx.fill()
+
+    # transmitting circles
+    for i in range(NO_ROUTER):
+        router = r[i]
+        x = router.pos_x
+        y = router.pos_y
+
+        if router.transmitted_now:
+            ctx.set_source_rgba(.10, .10, .10, 1.0)
+            ctx.move_to(x, y)
+            ctx.arc(x, y, 50, 0, 2 * math.pi)
+            ctx.fill()
+
+
+    for i in range(NO_ROUTER):
+        router = r[i]
+        x = router.pos_x
+        y = router.pos_y
+
+        color = ((1.0, 1.0, 0.5, 0.05), (1.0, 0.0, 1.0, 0.05))
+        ctx.set_line_width(0.1)
+        path_thinkness = 4.0
+        # iterate over links
+        for i, t in enumerate(router.ti):
+            range_ = t['range']
+            path_type = t['path_type']
+
+            # draw lines between links
+            ctx.set_line_width(path_thinkness)
+            for r_id, other in router.terminals[t['path_type']].connections.items():
+                other_x, other_y = other.pos_x, other.pos_y
+                ctx.move_to(x, y)
+                ctx.set_source_rgba(*c_links[path_type])
+                ctx.line_to(other_x, other_y)
+                ctx.stroke()
+
+            path_thinkness -= 2.0
+
+
+    # draw dots over all
+    for i in range(NO_ROUTER):
+        router = r[i]
+        x = router.pos_x
+        y = router.pos_y
+
+        ctx.set_line_width(0.0)
+        ctx.set_source_rgb(0, 0, 0)
+        ctx.move_to(x, y)
+        ctx.arc(x, y, 5, 0, 2 * math.pi)
+        ctx.fill()
+
 
     full_path = os.path.join(path, "{0:05}.png".format(img_idx))
     surface.write_to_png(full_path)
 
+def image_merge(merge_path, range_path, tx_path, img_idx):
+
+    m_path = os.path.join(merge_path, "{0:05}.png".format(img_idx))
+    r_path = os.path.join(range_path, "{0:05}.png".format(img_idx))
+    t_path = os.path.join(tx_path,    "{0:05}.png".format(img_idx))
+
+    images = map(Image.open, [r_path, t_path])
+    new_im = Image.new('RGB', (1920, 1080))
+
+    x_offset = 0
+    for im in images:
+        new_im.paste(im, (x_offset,0))
+        x_offset += im.size[0]
+
+    new_im.save(m_path, "PNG")
+
+
+PATH_IMAGES_RANGE = "images-range"
+PATH_IMAGES_TX    = "images-tx"
+PATH_IMAGES_MERGE = "images-merge"
+
+
+def draw_images(r, img_idx):
+    draw_router_loc(r, PATH_IMAGES_RANGE, img_idx)
+    draw_router_transmission(r, PATH_IMAGES_TX, img_idx)
+
+    image_merge(PATH_IMAGES_MERGE, PATH_IMAGES_RANGE, PATH_IMAGES_TX, img_idx)
+
 def setup_img_folder():
-    path = "images-router-path-ranges"
-    if os.path.exists(path):
-        shutil.rmtree(path)
-    os.makedirs(path)
-    return path
+    for path in (PATH_IMAGES_RANGE, PATH_IMAGES_TX, PATH_IMAGES_MERGE):
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        os.makedirs(path)
 
 def main():
-    img_path = setup_img_folder()
+    setup_img_folder()
 
     ti = [ {"path_type": "wb", "range" : 100, "bandwidth" : 5000},
            {"path_type": "nb", "range" : 150, "bandwidth" : 1000 } ]
@@ -265,7 +365,7 @@ def main():
         for i in range(NO_ROUTER):
             r[i].step()
         dist_update_all(r)
-        draw_router_loc(r, img_path, sec)
+        draw_images(r, sec)
 
 
 if __name__ == '__main__':

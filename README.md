@@ -4,5 +4,5 @@
 # Install Dependencies on Debian #
 
 ```
-sudo aptitude install python3-cairo-dev
+sudo aptitude install python3-cairo-dev python3-pil
 ```
