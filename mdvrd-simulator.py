@@ -95,8 +95,12 @@ class Router:
         self.terminals = addict.Dict()
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
-        self.route_rx_data = dict()
         self.transmitted_now = False
+
+        self.route_rx_data = dict()
+        for interface in ti:
+            self.route_rx_data[interface['path_type']] = dict()
+
 
 
     def _calc_next_tx_time(self):
@@ -123,19 +127,20 @@ class Router:
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
 
-    def _rx_save_data(self, sender, packet):
-        if not sender in self.route_rx_data:
-            self.route_rx_data[sender] = dict()
-            self.route_rx_data[sender][packet['path_type']] = dict()
-            self.route_rx_data[sender][packet['path_type']]['rx-time'] = self.time
+    def _rx_save_data(self, sender, interface, packet):
+        if not sender in self.route_rx_data[interface]:
+            self.route_rx_data[interface][sender] = dict()
+            self.route_rx_data[interface][sender][packet['path_type']] = dict()
+            self.route_rx_data[interface][sender][packet['path_type']]['rx-time'] = self.time
 
-    def rx_route_packet(self, sender, packet):
+    def rx_route_packet(self, sender, interface, packet):
         print("{} receive packet from {}".format(self.id, sender.id))
-        print("  path_type: {}\n".format(packet['path_type']))
+        print("  rx interface: {}\n".format(interface))
+        print("  path_type:    {}\n".format(packet['path_type']))
         #pprint.pprint(packet)
-        self._rx_save_data(sender, packet)
+        self._rx_save_data(sender, interface, packet)
 
-    def create_packet(self, path_type):
+    def create_routeing_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
         packet['path_type'] = path_type
@@ -146,12 +151,12 @@ class Router:
     def tx_route_packet(self):
         #print("{} transmit data".format(self.id))
         for v in self.ti:
-            pt = v['path_type']
-            for other_id, other_router in self.terminals[pt].connections.items():
+            interface = v['path_type']
+            for other_id, other_router in self.terminals[interface].connections.items():
                 """ this is the multicast packet transmission process """
                 #print(" to router {} [{}]".format(other_id, t))
-                packet = self.create_packet(pt)
-                other_router.rx_route_packet(self, packet)
+                packet = self.create_routing_packet(interface)
+                other_router.rx_route_packet(self, interface, packet)
 
 
     def pos(self):
