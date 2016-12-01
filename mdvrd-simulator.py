@@ -32,6 +32,8 @@ TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 SIMU_AREA_X = 960
 SIMU_AREA_Y = 1080
 
+DEFAULT_PACKET_TTL = 32
+
 random.seed(1)
 
 class Router:
@@ -134,13 +136,13 @@ class Router:
             self.route_rx_data[interface][sender][packet['path_type']]['rx-time'] = self.time
 
     def rx_route_packet(self, sender, interface, packet):
-        print("{} receive packet from {}".format(self.id, sender.id))
+        print("{} receive routing protocol packet from {}".format(self.id, sender.id))
         print("  rx interface: {}\n".format(interface))
         print("  path_type:    {}\n".format(packet['path_type']))
         #pprint.pprint(packet)
         self._rx_save_data(sender, interface, packet)
 
-    def create_routeing_packet(self, path_type):
+    def create_routing_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
         packet['path_type'] = path_type
@@ -157,6 +159,30 @@ class Router:
                 #print(" to router {} [{}]".format(other_id, t))
                 packet = self.create_routing_packet(interface)
                 other_router.rx_route_packet(self, interface, packet)
+
+
+    def forward_data_packet(self, packet):
+        # do a route FIB lookup to each dst_id
+        # and forward data to this router. If no
+        # route can be found then
+        # a) the destination is out of range
+        # b) route table has a bug
+        pass
+
+
+    def rx_data_packet(self, sender, interface, packet):
+        dst_id = packet.dst_id
+        src_id = packet.src_id
+        print("{} receive data packet from {}".format(self.id, sender.id))
+        print("src:{} dst:".format(dst_id, src_id))
+        if dst_id == self.id:
+            print("FINISH, packet received at destination")
+        else:
+            if packet.ttl <= 0:
+                print("TTL 0 reached, routing loop detected!!!")
+                return
+            packet.ttl -= 0
+            self.forward_data_packet(packet)
 
 
     def pos(self):
@@ -350,6 +376,13 @@ def setup_img_folder():
             shutil.rmtree(path)
         os.makedirs(path)
 
+def gen_data_packet(src_id, dst_id):
+    packet = addict.Dict()
+    packet.src_id = random.randint(0, NO_ROUTER)
+    packet.dst_id = random.randint(0, NO_ROUTER)
+    packet.ttl = DEFAULT_PACKET_TTL
+    return packet
+
 def main():
     setup_img_folder()
 
@@ -371,6 +404,9 @@ def main():
             r[i].step()
         dist_update_all(r)
         draw_images(r, sec)
+        # inject data packet into network
+        packet = gen_data_packet()
+        r[packet.src_id].forward_data_packet(packet)
 
     cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4"
     print("now execute \"{}\" to generate a video".format(cmd))
