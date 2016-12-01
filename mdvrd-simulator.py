@@ -129,7 +129,7 @@ class Router:
             self.route_rx_data[sender][packet['path_type']] = dict()
             self.route_rx_data[sender][packet['path_type']]['rx-time'] = self.time
 
-    def receive(self, sender, packet):
+    def rx_route_packet(self, sender, packet):
         print("{} receive packet from {}".format(self.id, sender.id))
         print("  path_type: {}\n".format(packet['path_type']))
         #pprint.pprint(packet)
@@ -143,7 +143,7 @@ class Router:
         packet['networks'].append({"v4-prefix" : self.prefix})
         return packet
 
-    def _transmit(self):
+    def tx_route_packet(self):
         #print("{} transmit data".format(self.id))
         for v in self.ti:
             pt = v['path_type']
@@ -151,7 +151,7 @@ class Router:
                 """ this is the multicast packet transmission process """
                 #print(" to router {} [{}]".format(other_id, t))
                 packet = self.create_packet(pt)
-                other_router.receive(self, packet)
+                other_router.rx_route_packet(self, packet)
 
 
     def pos(self):
@@ -161,7 +161,7 @@ class Router:
         self.time += 1
         self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
         if self.time == self._next_tx_time:
-            self._transmit()
+            self.tx_route_packet()
             self._calc_next_tx_time()
             self.transmitted_now = True
         else:
