@@ -167,14 +167,14 @@ class Router:
         # route can be found then
         # a) the destination is out of range
         # b) route table has a bug
-        pass
+        dst_id = packet.dst_id
+        src_id = packet.src_id
+        print("src:{} dst:".format(dst_id, src_id))
+        print("TOS: {} (packet prefered way)".format(packet.tos))
 
 
     def rx_data_packet(self, sender, interface, packet):
-        dst_id = packet.dst_id
-        src_id = packet.src_id
         print("{} receive data packet from {}".format(self.id, sender.id))
-        print("src:{} dst:".format(dst_id, src_id))
         if dst_id == self.id:
             print("FINISH, packet received at destination")
         else:
@@ -217,7 +217,7 @@ def dist_update_all(r):
 
 
 def draw_router_loc(r, path, img_idx):
-    c_links = { 'nb' : (1.0, 0.15, 0.15, 1.0),  'wb' :(0.15, 1.0, 0.15, 1.0)}
+    c_links = { 'tetra00' : (1.0, 0.15, 0.15, 1.0),  'wifi00' :(0.15, 1.0, 0.15, 1.0)}
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
     ctx = cairo.Context(surface)
     ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
@@ -281,7 +281,6 @@ def draw_router_loc(r, path, img_idx):
 
 
 def draw_router_transmission(r, path, img_idx):
-    c_links = { 'nb' : (.0, .0, .0, .4),  'wb' :(.0, .0, .0, .4)}
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
     ctx = cairo.Context(surface)
     ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
@@ -319,7 +318,7 @@ def draw_router_transmission(r, path, img_idx):
             for r_id, other in router.terminals[t['path_type']].connections.items():
                 other_x, other_y = other.pos_x, other.pos_y
                 ctx.move_to(x, y)
-                ctx.set_source_rgba(*c_links[path_type])
+                ctx.set_source_rgba(.0, .0, .0, .4)
                 ctx.line_to(other_x, other_y)
                 ctx.stroke()
 
@@ -376,18 +375,20 @@ def setup_img_folder():
             shutil.rmtree(path)
         os.makedirs(path)
 
-def gen_data_packet(src_id, dst_id):
+def gen_data_packet():
     packet = addict.Dict()
     packet.src_id = random.randint(0, NO_ROUTER)
     packet.dst_id = random.randint(0, NO_ROUTER)
     packet.ttl = DEFAULT_PACKET_TTL
+    # the prefered transmit is via wifi00, can be tetra if not possible
+    packet.tos = 'wifi00'
     return packet
 
 def main():
     setup_img_folder()
 
-    ti = [ {"path_type": "wb", "range" : 100, "bandwidth" : 5000},
-           {"path_type": "nb", "range" : 150, "bandwidth" : 1000 } ]
+    ti = [ {"path_type": "wifi00", "range" : 100, "bandwidth" : 5000},
+           {"path_type": "tetra00", "range" : 150, "bandwidth" : 1000 } ]
 
     r = dict()
     for i in range(NO_ROUTER):
