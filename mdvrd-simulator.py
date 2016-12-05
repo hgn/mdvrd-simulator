@@ -140,12 +140,16 @@ class Router:
         self.route_rx_data[interface][sender.id]['packet'] = packet
 
     def _check_outdated_route_entries(self):
+        dellist = []
         for interface, v in self.route_rx_data.items():
             for router_id, vv in v.items():
                 if vv["rx-time"] > DEAD_INTERVAL:
-                    print("entry outdated, remove from database")
-                    del v[router_id]
-                    continue
+                    msg = "{}: route entry from {} outdated [interface:{}], remove from database"
+                    print(msg.format(self.id, router_id, interface))
+                    dellist.append(router_id)
+            for id in dellist:
+                del v[id]
+            dellist = []
 
     def _recalculate_routing_table(self):
         # this function is called when
