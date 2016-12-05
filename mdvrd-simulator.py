@@ -135,17 +135,17 @@ class Router:
             self.route_rx_data[interface][sender.id] = dict()
             self.route_rx_data[interface][sender.id]['rx-time'] = self.time
             self.route_rx_data[interface][sender.id]['packet'] = packet
-	    return
-         self.route_rx_data[interface][sender.id]['rx-time'] = self.time
-         self.route_rx_data[interface][sender.id]['packet'] = packet
+            return
+        self.route_rx_data[interface][sender.id]['rx-time'] = self.time
+        self.route_rx_data[interface][sender.id]['packet'] = packet
 
     def _check_outdated_route_entries(self):
         for interface, v in self.route_rx_data.items():
-	    for router_id, vv in v.items():
-	        if vv["rx-time"] > DEAD_INTERVAL:
-		    print("entry outdated, remove from database")
-		    del v[router_id]
-		    continue
+            for router_id, vv in v.items():
+                if vv["rx-time"] > DEAD_INTERVAL:
+                    print("entry outdated, remove from database")
+                    del v[router_id]
+                    continue
 
     def _recalculate_routing_table(self):
         # this function is called when
@@ -160,7 +160,7 @@ class Router:
         print("  path_type:    {}\n".format(packet['path_type']))
         #pprint.pprint(packet)
         self._rx_save_routing_data(sender, interface, packet)
-	self._recalculate_routing_table()
+        self._recalculate_routing_table()
 
     def create_routing_packet(self, path_type):
         packet = dict()
@@ -191,7 +191,7 @@ class Router:
         # b) route table has a bug
         dst_id = packet.dst_id
         src_id = packet.src_id
-        print("src:{} dst:".format(dst_id, src_id))
+        print("src:{} dst:{}".format(src_id, dst_id))
         print("TOS: {} (packet prefered way)".format(packet.tos))
 
 
@@ -213,7 +213,7 @@ class Router:
     def step(self):
         self.time += 1
         self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
-	self._check_outdated_route_entries()
+        self._check_outdated_route_entries()
         if self.time == self._next_tx_time:
             self.tx_route_packet()
             self._calc_next_tx_time()
