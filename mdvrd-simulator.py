@@ -27,6 +27,7 @@ SIMULATION_TIME_SEC = 60 * 60
 
 TX_INTERVAL = 30
 TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
+DEAD_INTERVAL = TX_INTERVAL * 3 + 1
 
 # two stiched images result in 1080p resoltion
 SIMU_AREA_X = 960
@@ -129,18 +130,37 @@ class Router:
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
 
-    def _rx_save_data(self, sender, interface, packet):
+    def _rx_save_routing_data(self, sender, interface, packet):
         if not sender in self.route_rx_data[interface]:
-            self.route_rx_data[interface][sender] = dict()
-            self.route_rx_data[interface][sender][packet['path_type']] = dict()
-            self.route_rx_data[interface][sender][packet['path_type']]['rx-time'] = self.time
+            self.route_rx_data[interface][sender.id] = dict()
+            self.route_rx_data[interface][sender.id]['rx-time'] = self.time
+            self.route_rx_data[interface][sender.id]['packet'] = packet
+	    return
+         self.route_rx_data[interface][sender.id]['rx-time'] = self.time
+         self.route_rx_data[interface][sender.id]['packet'] = packet
+
+    def _check_outdated_route_entries(self):
+        for interface, v in self.route_rx_data.items():
+	    for router_id, vv in v.items():
+	        if vv["rx-time"] > DEAD_INTERVAL:
+		    print("entry outdated, remove from database")
+		    del v[router_id]
+		    continue
+
+    def _recalculate_routing_table(self):
+        # this function is called when
+	# a) a new routing packet is received from one of our neighbors
+	# b) a particular routing information is outdated and removed from
+	#    self.route_rx_data
+        pass
 
     def rx_route_packet(self, sender, interface, packet):
         print("{} receive routing protocol packet from {}".format(self.id, sender.id))
         print("  rx interface: {}\n".format(interface))
         print("  path_type:    {}\n".format(packet['path_type']))
         #pprint.pprint(packet)
-        self._rx_save_data(sender, interface, packet)
+        self._rx_save_routing_data(sender, interface, packet)
+	self._recalculate_routing_table()
 
     def create_routing_packet(self, path_type):
         packet = dict()
@@ -151,6 +171,8 @@ class Router:
         return packet
 
     def tx_route_packet(self):
+        # depending on local information the route
+	# packets must be generated for each interface
         #print("{} transmit data".format(self.id))
         for v in self.ti:
             interface = v['path_type']
@@ -191,6 +213,7 @@ class Router:
     def step(self):
         self.time += 1
         self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
+	self._check_outdated_route_entries()
         if self.time == self._next_tx_time:
             self.tx_route_packet()
             self._calc_next_tx_time()
