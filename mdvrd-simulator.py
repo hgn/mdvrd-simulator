@@ -37,6 +37,10 @@ DEFAULT_PACKET_TTL = 32
 
 random.seed(1)
 
+# statitics variables follows
+NEIGHBOR_INFO_ACTIVE = 0
+
+
 class Router:
 
     class MobilityModel:
@@ -133,15 +137,14 @@ class Router:
     def _rx_save_routing_data(self, sender, interface, packet):
         if not sender in self.route_rx_data[interface]:
             self.route_rx_data[interface][sender.id] = dict()
-            self.route_rx_data[interface][sender.id]['rx-time'] = self.time
-            self.route_rx_data[interface][sender.id]['packet'] = packet
-            return
+            global NEIGHBOR_INFO_ACTIVE
+            NEIGHBOR_INFO_ACTIVE += 1
         self.route_rx_data[interface][sender.id]['rx-time'] = self.time
         self.route_rx_data[interface][sender.id]['packet'] = packet
 
     def _check_outdated_route_entries(self):
-        dellist = []
         for interface, v in self.route_rx_data.items():
+            dellist = []
             for router_id, vv in v.items():
                 if vv["rx-time"] > DEAD_INTERVAL:
                     msg = "{}: route entry from {} outdated [interface:{}], remove from database"
@@ -149,19 +152,20 @@ class Router:
                     dellist.append(router_id)
             for id in dellist:
                 del v[id]
-            dellist = []
+                global NEIGHBOR_INFO_ACTIVE
+                NEIGHBOR_INFO_ACTIVE -= 1
 
     def _recalculate_routing_table(self):
         # this function is called when
-	# a) a new routing packet is received from one of our neighbors
-	# b) a particular routing information is outdated and removed from
-	#    self.route_rx_data
+        # a) a new routing packet is received from one of our neighbors
+        # b) a particular routing information is outdated and removed from
+        #    self.route_rx_data
         pass
 
     def rx_route_packet(self, sender, interface, packet):
         print("{} receive routing protocol packet from {}".format(self.id, sender.id))
-        print("  rx interface: {}\n".format(interface))
-        print("  path_type:    {}\n".format(packet['path_type']))
+        print("  rx interface: {}".format(interface))
+        print("  path_type:    {}".format(packet['path_type']))
         #pprint.pprint(packet)
         self._rx_save_routing_data(sender, interface, packet)
         self._recalculate_routing_table()
@@ -404,11 +408,11 @@ def setup_img_folder():
 
 def gen_data_packet():
     packet = addict.Dict()
-    packet.src_id = random.randint(0, NO_ROUTER)
-    packet.dst_id = random.randint(0, NO_ROUTER)
+    packet.src_id = random.randint(0, NO_ROUTER - 1)
+    packet.dst_id = random.randint(0, NO_ROUTER - 1)
     packet.ttl = DEFAULT_PACKET_TTL
     # the prefered transmit is via wifi00, can be tetra if not possible
-    packet.tos = 'wifi00'
+    packet.tos = 'low-latency'
     return packet
 
 def main():
@@ -427,7 +431,8 @@ def main():
     dist_update_all(r)
 
     for sec in range(SIMULATION_TIME_SEC):
-        print("time:{} of:{}".format(sec, SIMULATION_TIME_SEC))
+        sep = '=' * 50
+        print("\n{}\nsimulation time:{} of:{}".format(sep, sec, SIMULATION_TIME_SEC))
         for i in range(NO_ROUTER):
             r[i].step()
         dist_update_all(r)
@@ -435,6 +440,7 @@ def main():
         # inject data packet into network
         packet = gen_data_packet()
         r[packet.src_id].forward_data_packet(packet)
+        print("NEIGHBOR INFO ACTIVE: {}".format(NEIGHBOR_INFO_ACTIVE))
 
     cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4"
     print("now execute \"{}\" to generate a video".format(cmd))
