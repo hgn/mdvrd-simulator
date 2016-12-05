@@ -147,7 +147,7 @@ class Router:
             dellist = []
             for router_id, vv in v.items():
                 if vv["rx-time"] > DEAD_INTERVAL:
-                    msg = "{}: route entry from {} outdated [interface:{}], remove from database"
+                    msg = "{}: route entry from {} outdated [interface:{}], remove from raw table"
                     print(msg.format(self.id, router_id, interface))
                     dellist.append(router_id)
             for id in dellist:
