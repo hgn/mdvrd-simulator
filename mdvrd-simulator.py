@@ -176,9 +176,8 @@ class Router:
         pass
 
     def rx_route_packet(self, sender, interface, packet):
-        print("{} receive routing protocol packet from {}".format(self.id, sender.id))
+        print("{} receive routing protocol packet from {} via".format(self.id, sender.id, interface))
         print("  rx interface: {}".format(interface))
-        print("  path_type:    {}".format(packet['path_type']))
         #pprint.pprint(packet)
         self._rx_save_routing_data(sender, interface, packet)
         self._recalculate_routing_table()
@@ -186,7 +185,6 @@ class Router:
     def create_routing_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
-        packet['path_type'] = path_type
         packet['networks'] = list()
         packet['networks'].append({"v4-prefix" : self.prefix})
         return packet
