@@ -160,6 +160,19 @@ class Router:
         # a) a new routing packet is received from one of our neighbors
         # b) a particular routing information is outdated and removed from
         #    self.route_rx_data
+        # if you have a packet for id 200, then you have one possibility via 23 via interface "wifi00
+        # self.fib["200"] = {
+        # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
+        # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
+        # }
+        # self.fib["20"] = {
+        # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
+        # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
+        # }
+        # self.fib["23"] = {
+        # 			"highest-bandwidth": { "next-hop-id" : "direct", "interface" : "wifi00"  },
+        # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
+        # }
         pass
 
     def rx_route_packet(self, sender, interface, packet):
