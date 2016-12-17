@@ -365,7 +365,7 @@ def draw_router_transmission(r, path, img_idx):
 
         color = ((1.0, 1.0, 0.5, 0.05), (1.0, 0.0, 1.0, 0.05))
         ctx.set_line_width(0.1)
-        path_thinkness = 4.0
+        path_thinkness = 6.0
         # iterate over links
         for i, t in enumerate(router.ti):
             range_ = t['range']
@@ -380,7 +380,9 @@ def draw_router_transmission(r, path, img_idx):
                 ctx.line_to(other_x, other_y)
                 ctx.stroke()
 
-            path_thinkness -= 2.0
+            path_thinkness -= 4.0
+            if path_thinkness < 2.0:
+                path_thinkness = 2.0
 
 
     # draw dots over all
