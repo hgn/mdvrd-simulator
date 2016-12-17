@@ -17,6 +17,7 @@ import math
 import addict
 import cairo
 import shutil
+import copy
 from PIL import Image
 
 
@@ -39,6 +40,8 @@ random.seed(1)
 
 # statitics variables follows
 NEIGHBOR_INFO_ACTIVE = 0
+
+LOGPATH = "logs"
 
 
 class Router:
@@ -98,6 +101,8 @@ class Router:
         self.pos_x = random.randint(0, SIMU_AREA_X)
         self.pos_y = random.randint(0, SIMU_AREA_Y)
         self.time = 0
+
+        self._init_log()
         self._init_terminals_data()
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
@@ -107,7 +112,39 @@ class Router:
         for interface in ti:
             self.route_rx_data[interface['path_type']] = dict()
 
+    def _log(self, msg):
+        msg = "{:5}: {}\n".format(self.time, msg)
+        self._log_fd.write(msg)
 
+    def _init_log(self):
+        file_path = os.path.join(LOGPATH, "{0:05}.log".format(self.id))
+        self._log_fd = open(file_path, 'w')
+
+    def _cmp_dicts(dict1, dict2):
+        if dict1 == None or dict2 == None: return False
+        if type(dict1) is not dict or type(dict2) is not dict: return False
+        shared_keys = set(dict2.keys()) & set(dict2.keys())
+        if not len(shared_keys) == len(dict1.keys()) and len(shared_keys) == len(dict2.keys()):
+            return False
+        eq = True
+        for key in dict1.keys():
+            if type(dict1[key]) is dict:
+                eq = eq and compare_dictionaries(dict1[key],dict2[key])
+            else:
+                eq = eq and (dict1[key] == dict2[key])
+        return eq
+
+    def _cmp_packets(packet1, packet2):
+        p1 = copy.deepcopy(packet1)
+        p2 = copy.deepcopy(packet2)
+        # some data may differ, but the content is identical,
+        # zeroize them here out
+        p1['sequence-no'] = 0
+        p2['sequence-no'] = 0
+        eq = self._cmp_dicts(p1, p2)
+        if eq:
+            raise("packet queal")
+        return eq
 
     def _calc_next_tx_time(self):
             self._next_tx_time = self.time + TX_INTERVAL + random.randint(0, TX_INTERVAL_JITTER)
@@ -146,7 +183,7 @@ class Router:
                     del self.terminals[t].connections[other.id]
 
     def _rx_save_routing_data(self, sender, interface, packet):
-        route_recalc_required = False
+        route_recalc_required = True
         if not sender in self.route_rx_data[interface]:
             # new entry (never seen before) or outdated comes
             # back again
@@ -154,33 +191,42 @@ class Router:
             global NEIGHBOR_INFO_ACTIVE
             NEIGHBOR_INFO_ACTIVE += 1
         else:
+            raise
             # existing entry from neighbor
             seq_no_last = self.route_rx_data[interface][sender.id]['packet']['sequence-no']
             seq_no_new  = packet['sequence-no']
             if seq_no_new <= seq_no_last:
                 print("receive duplicate or outdated route packet -> ignore it")
-                route_recal_required = False
+                route_recalc_required = False
                 return route_recalc_required
+            data_equal = self._cmp_packets(self.route_rx_data[interface][sender.id]['packet'], packet)
+            if data_equal:
+                # packet is identical, we must save the last packet (think update sequence no)
+                # but a route recalculation is not required
+                route_recalc_required = False
         self.route_rx_data[interface][sender.id]['rx-time'] = self.time
         self.route_rx_data[interface][sender.id]['packet'] = packet
 
         # for now recalculate route table at every received packet, later we
         # will only recalculate when data has changed
-        route_recal_required = True
         return route_recalc_required
 
     def _check_outdated_route_entries(self):
+        route_recalc_required = False
         for interface, v in self.route_rx_data.items():
             dellist = []
             for router_id, vv in v.items():
-                if vv["rx-time"] > DEAD_INTERVAL:
+                if self.time - vv["rx-time"] > DEAD_INTERVAL:
                     msg = "{}: route entry from {} outdated [interface:{}], remove from raw table"
+                    self._log("outdated entry from {} received at {}, interface: {}".format(router_id, vv["rx-time"], interface))
                     print(msg.format(self.id, router_id, interface))
                     dellist.append(router_id)
             for id in dellist:
+                route_recalc_required = True
                 del v[id]
                 global NEIGHBOR_INFO_ACTIVE
                 NEIGHBOR_INFO_ACTIVE -= 1
+        return route_recalc_required
 
     def _recalculate_routing_table(self):
         # this function is called when
@@ -200,15 +246,16 @@ class Router:
         # 			"highest-bandwidth": { "next-hop-id" : "direct", "interface" : "wifi00"  },
         # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
         # }
-        pass
+        print("{} recalculate routing table".format(self.id))
 
     def rx_route_packet(self, sender, interface, packet):
-        print("{} receive routing protocol packet from {} via".format(self.id, sender.id, interface))
+        self._log("rx route packet from {}, interface:{}, seq-no:{}".format(sender.id, interface, packet['sequence-no']))
+        print("{} receive routing protocol packet from {}".format(self.id, sender.id))
         print("  rx interface: {}".format(interface))
         print("  sequence no:  {}".format(packet['sequence-no']))
         #pprint.pprint(packet)
-        recalc_required = self._rx_save_routing_data(sender, interface, packet)
-        if recalc_required:
+        route_recalc_required = self._rx_save_routing_data(sender, interface, packet)
+        if route_recalc_required:
             self._recalculate_routing_table()
 
     def create_routing_packet(self, path_type):
@@ -228,10 +275,10 @@ class Router:
         #print("{} transmit data".format(self.id))
         for v in self.ti:
             interface = v['path_type']
+            packet = self.create_routing_packet(interface)
             for other_id, other_router in self.terminals[interface].connections.items():
                 """ this is the multicast packet transmission process """
                 #print(" to router {} [{}]".format(other_id, t))
-                packet = self.create_routing_packet(interface)
                 other_router.rx_route_packet(self, interface, packet)
 
 
@@ -265,7 +312,10 @@ class Router:
     def step(self):
         self.time += 1
         self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
-        self._check_outdated_route_entries()
+        route_recalc_required = self._check_outdated_route_entries()
+        if route_recalc_required:
+            self._recalculate_routing_table()
+
         if self.time == self._next_tx_time:
             self.tx_route_packet()
             self._calc_next_tx_time()
@@ -461,8 +511,14 @@ def gen_data_packet():
     packet.tos = 'low-latency'
     return packet
 
+def setup_log_folder():
+    if os.path.exists(LOGPATH):
+        shutil.rmtree(LOGPATH)
+    os.makedirs(LOGPATH)
+
 def main():
     setup_img_folder()
+    setup_log_folder()
 
     ti = [ {"path_type": "wifi00", "range" : 100, "bandwidth" : 5000},
            {"path_type": "tetra00", "range" : 150, "bandwidth" : 1000 } ]
