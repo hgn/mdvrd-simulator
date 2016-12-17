@@ -189,6 +189,7 @@ class Router:
     def rx_route_packet(self, sender, interface, packet):
         print("{} receive routing protocol packet from {} via".format(self.id, sender.id, interface))
         print("  rx interface: {}".format(interface))
+        print("  sequence no:  {}".format(packet['sequence-no']))
         #pprint.pprint(packet)
         self._rx_save_routing_data(sender, interface, packet)
         self._recalculate_routing_table()
@@ -196,13 +197,17 @@ class Router:
     def create_routing_packet(self, path_type):
         packet = dict()
         packet['router-id'] = self.id
+        # add sequence number to packet ..
+        packet['sequence-no'] = self._sequence_no(path_type)
+        # ... and increment number locally
+        self._sequence_no_inc(path_type)
         packet['networks'] = list()
         packet['networks'].append({"v4-prefix" : self.prefix})
         return packet
 
     def tx_route_packet(self):
         # depending on local information the route
-	# packets must be generated for each interface
+        # packets must be generated for each interface
         #print("{} transmit data".format(self.id))
         for v in self.ti:
             interface = v['path_type']
@@ -337,7 +342,7 @@ def draw_router_transmission(r, path, img_idx):
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
     ctx = cairo.Context(surface)
     ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
-    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0) 
+    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0)
     ctx.fill()
 
     # transmitting circles
