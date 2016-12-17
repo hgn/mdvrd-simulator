@@ -146,12 +146,28 @@ class Router:
                     del self.terminals[t].connections[other.id]
 
     def _rx_save_routing_data(self, sender, interface, packet):
+        route_recalc_required = False
         if not sender in self.route_rx_data[interface]:
+            # new entry (never seen before) or outdated comes
+            # back again
             self.route_rx_data[interface][sender.id] = dict()
             global NEIGHBOR_INFO_ACTIVE
             NEIGHBOR_INFO_ACTIVE += 1
+        else:
+            # existing entry from neighbor
+            seq_no_last = self.route_rx_data[interface][sender.id]['packet']['sequence-no']
+            seq_no_new  = packet['sequence-no']
+            if seq_no_new <= seq_no_last:
+                print("receive duplicate or outdated route packet -> ignore it")
+                route_recal_required = False
+                return route_recalc_required
         self.route_rx_data[interface][sender.id]['rx-time'] = self.time
         self.route_rx_data[interface][sender.id]['packet'] = packet
+
+        # for now recalculate route table at every received packet, later we
+        # will only recalculate when data has changed
+        route_recal_required = True
+        return route_recalc_required
 
     def _check_outdated_route_entries(self):
         for interface, v in self.route_rx_data.items():
@@ -191,8 +207,9 @@ class Router:
         print("  rx interface: {}".format(interface))
         print("  sequence no:  {}".format(packet['sequence-no']))
         #pprint.pprint(packet)
-        self._rx_save_routing_data(sender, interface, packet)
-        self._recalculate_routing_table()
+        recalc_required = self._rx_save_routing_data(sender, interface, packet)
+        if recalc_required:
+            self._recalculate_routing_table()
 
     def create_routing_packet(self, path_type):
         packet = dict()
