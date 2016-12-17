@@ -98,8 +98,7 @@ class Router:
         self.pos_x = random.randint(0, SIMU_AREA_X)
         self.pos_y = random.randint(0, SIMU_AREA_Y)
         self.time = 0
-        self._init_terminals
-        self.terminals = addict.Dict()
+        self._init_terminals_data()
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
         self.transmitted_now = False
@@ -113,11 +112,23 @@ class Router:
     def _calc_next_tx_time(self):
             self._next_tx_time = self.time + TX_INTERVAL + random.randint(0, TX_INTERVAL_JITTER)
 
+    def _sequence_no(self, path_type):
+        return self.terminals[path_type].sequence_no
 
-    def _init_terminals(self):
+    def _sequence_no_inc(self, path_type):
+        self.terminals[path_type].sequence_no += 1
+
+    def _init_terminals_data(self):
+        self.terminals = addict.Dict()
         for t in self.ti:
             self.terminals[t['path_type']] = addict.Dict()
             self.terminals[t['path_type']].connections = dict()
+            # we initialize and handle as many sequence numbers
+            # as interfaces because sequence numbers are interface
+            # specific. Think about n interfaces, each with a different
+            # transmission interval, thus the sequence number is
+            # incremented independently.
+            self.terminals[t['path_type']].sequence_no = 0
 
     def dist_update(self, dist, other):
         """connect is just information base on distance
@@ -263,7 +274,7 @@ def draw_router_loc(r, path, img_idx):
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIMU_AREA_X, SIMU_AREA_Y)
     ctx = cairo.Context(surface)
     ctx.rectangle(0, 0, SIMU_AREA_X, SIMU_AREA_Y)
-    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0) 
+    ctx.set_source_rgba(0.15, 0.15, 0.15, 1.0)
     ctx.fill()
 
     for i in range(NO_ROUTER):
