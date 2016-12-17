@@ -120,7 +120,7 @@ class Router:
         file_path = os.path.join(LOGPATH, "{0:05}.log".format(self.id))
         self._log_fd = open(file_path, 'w')
 
-    def _cmp_dicts(dict1, dict2):
+    def _cmp_dicts(self, dict1, dict2):
         if dict1 == None or dict2 == None: return False
         if type(dict1) is not dict or type(dict2) is not dict: return False
         shared_keys = set(dict2.keys()) & set(dict2.keys())
@@ -134,17 +134,15 @@ class Router:
                 eq = eq and (dict1[key] == dict2[key])
         return eq
 
-    def _cmp_packets(packet1, packet2):
+    def _cmp_packets(self, packet1, packet2):
         p1 = copy.deepcopy(packet1)
         p2 = copy.deepcopy(packet2)
         # some data may differ, but the content is identical,
         # zeroize them here out
         p1['sequence-no'] = 0
         p2['sequence-no'] = 0
-        eq = self._cmp_dicts(p1, p2)
-        if eq:
-            raise("packet queal")
-        return eq
+        return self._cmp_dicts(p1, p2)
+
 
     def _calc_next_tx_time(self):
             self._next_tx_time = self.time + TX_INTERVAL + random.randint(0, TX_INTERVAL_JITTER)
@@ -184,14 +182,14 @@ class Router:
 
     def _rx_save_routing_data(self, sender, interface, packet):
         route_recalc_required = True
-        if not sender in self.route_rx_data[interface]:
+        if not sender.id in self.route_rx_data[interface]:
             # new entry (never seen before) or outdated comes
             # back again
             self.route_rx_data[interface][sender.id] = dict()
             global NEIGHBOR_INFO_ACTIVE
             NEIGHBOR_INFO_ACTIVE += 1
         else:
-            raise
+            self._log("\texisting entry")
             # existing entry from neighbor
             seq_no_last = self.route_rx_data[interface][sender.id]['packet']['sequence-no']
             seq_no_new  = packet['sequence-no']
@@ -217,9 +215,8 @@ class Router:
             dellist = []
             for router_id, vv in v.items():
                 if self.time - vv["rx-time"] > DEAD_INTERVAL:
-                    msg = "{}: route entry from {} outdated [interface:{}], remove from raw table"
-                    self._log("outdated entry from {} received at {}, interface: {}".format(router_id, vv["rx-time"], interface))
-                    print(msg.format(self.id, router_id, interface))
+                    msg = "outdated entry from {} received at {}, interface: {} - drop it"
+                    self._log(msg.format(router_id, vv["rx-time"], interface))
                     dellist.append(router_id)
             for id in dellist:
                 route_recalc_required = True
@@ -229,6 +226,7 @@ class Router:
         return route_recalc_required
 
     def _recalculate_routing_table(self):
+        self._log("recalculate routing table")
         # this function is called when
         # a) a new routing packet is received from one of our neighbors
         # b) a particular routing information is outdated and removed from
@@ -246,14 +244,10 @@ class Router:
         # 			"highest-bandwidth": { "next-hop-id" : "direct", "interface" : "wifi00"  },
         # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
         # }
-        print("{} recalculate routing table".format(self.id))
 
     def rx_route_packet(self, sender, interface, packet):
-        self._log("rx route packet from {}, interface:{}, seq-no:{}".format(sender.id, interface, packet['sequence-no']))
-        print("{} receive routing protocol packet from {}".format(self.id, sender.id))
-        print("  rx interface: {}".format(interface))
-        print("  sequence no:  {}".format(packet['sequence-no']))
-        #pprint.pprint(packet)
+        msg = "rx route packet from {}, interface:{}, seq-no:{}"
+        self._log(msg.format(sender.id, interface, packet['sequence-no']))
         route_recalc_required = self._rx_save_routing_data(sender, interface, packet)
         if route_recalc_required:
             self._recalculate_routing_table()
@@ -290,8 +284,9 @@ class Router:
         # b) route table has a bug
         dst_id = packet.dst_id
         src_id = packet.src_id
-        print("src:{} dst:{}".format(src_id, dst_id))
-        print("TOS: {} (packet prefered way)".format(packet.tos))
+        print("packet src:{} dst:{}".format(src_id, dst_id))
+        print("  current:{} nexthop:?".format(self.id))
+        print("  TOS: {} (packet prefered way)".format(packet.tos))
 
 
     def rx_data_packet(self, sender, interface, packet):
@@ -532,17 +527,16 @@ def main():
     # initial positioning
     dist_update_all(r)
 
+    packet = gen_data_packet()
     for sec in range(SIMULATION_TIME_SEC):
         sep = '=' * 50
-        print("\n{}\nsimulation time:{} of:{}".format(sep, sec, SIMULATION_TIME_SEC))
+        print("\n{}\nsimulation time:{:6}/{}\n".format(sep, sec, SIMULATION_TIME_SEC))
         for i in range(NO_ROUTER):
             r[i].step()
         dist_update_all(r)
         draw_images(r, sec)
         # inject data packet into network
-        packet = gen_data_packet()
         r[packet.src_id].forward_data_packet(packet)
-        print("NEIGHBOR INFO ACTIVE: {}".format(NEIGHBOR_INFO_ACTIVE))
 
     cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4"
     print("now execute \"{}\" to generate a video".format(cmd))
