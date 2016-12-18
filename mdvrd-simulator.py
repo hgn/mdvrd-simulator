@@ -497,13 +497,13 @@ def setup_img_folder():
             shutil.rmtree(path)
         os.makedirs(path)
 
-def gen_data_packet():
+def gen_data_packet(src_id, dst_id, tos='low-loss'):
     packet = addict.Dict()
-    packet.src_id = random.randint(0, NO_ROUTER - 1)
-    packet.dst_id = random.randint(0, NO_ROUTER - 1)
+    packet.src_id = src_id
+    packet.dst_id = dst_id
     packet.ttl = DEFAULT_PACKET_TTL
     # the prefered transmit is via wifi00, can be tetra if not possible
-    packet.tos = 'low-latency'
+    packet.tos = tos
     return packet
 
 def setup_log_folder():
@@ -527,7 +527,10 @@ def main():
     # initial positioning
     dist_update_all(r)
 
-    packet = gen_data_packet()
+    src_id = random.randint(0, NO_ROUTER - 1)
+    dst_id = random.randint(0, NO_ROUTER - 1)
+    packet_low_loss       = gen_data_packet(src_id, dst_id, tos='low-loss')
+    packet_high_througput = gen_data_packet(src_id, dst_id, tos='high-throughput')
     for sec in range(SIMULATION_TIME_SEC):
         sep = '=' * 50
         print("\n{}\nsimulation time:{:6}/{}\n".format(sep, sec, SIMULATION_TIME_SEC))
@@ -535,10 +538,11 @@ def main():
             r[i].step()
         dist_update_all(r)
         draw_images(r, sec)
-        # inject data packet into network
-        r[packet.src_id].forward_data_packet(packet)
+        # inject test data packet into network
+        r[src_id].forward_data_packet(packet_low_loss)
+        r[src_id].forward_data_packet(packet_high_througput)
 
-    cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4"
+    cmd = "ffmpeg -framerate 10 -pattern_type glob -i 'images-merge/*.png' -c:v libx264 -pix_fmt yuv420p mdvrd.mp4"
     print("now execute \"{}\" to generate a video".format(cmd))
 
 
