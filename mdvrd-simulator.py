@@ -102,15 +102,16 @@ class Router:
             return x, y
 
 
-    def __init__(self, id, ti, prefix):
+    def __init__(self, id, ti, prefix_v4):
         self.id = id
+        self._init_log()
         self.ti = ti
-        self.prefix = prefix
+        self.prefix_v4 = prefix_v4
         self.pos_x = random.randint(0, SIMU_AREA_X)
         self.pos_y = random.randint(0, SIMU_AREA_Y)
         self.time = 0
+        self._print_log_header()
 
-        self._init_log()
         self._init_terminals_data()
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
@@ -119,6 +120,11 @@ class Router:
         self.route_rx_data = dict()
         for interface in ti:
             self.route_rx_data[interface['path_type']] = dict()
+
+
+    def _print_log_header(self):
+        self._log("Initialize router {}".format(self.id))
+        self._log("  v4 prefix:{}".format(self.prefix_v4))
 
 
     def _log(self, msg):
@@ -281,7 +287,7 @@ class Router:
         # ... and increment number locally
         self._sequence_no_inc(path_type)
         packet['networks'] = list()
-        packet['networks'].append({"v4-prefix" : self.prefix})
+        packet['networks'].append({"v4-prefix" : self.prefix_v4})
         return packet
 
 
@@ -342,12 +348,14 @@ class Router:
             self.transmitted_now = False
 
 
-def rand_ip_prefix():
-	addr = random.randint(0, 4000000000)
-	a = socket.inet_ntoa(struct.pack("!I", addr))
-	b = a.split(".")
-	c = "{}.{}.{}.0/24".format(b[0], b[1], b[2])
-	return c
+def rand_ip_prefix(type_):
+    if type_ != "v4":
+        raise Exception("Only v4 prefixes supported for now")
+    addr = random.randint(0, 4000000000)
+    a = socket.inet_ntoa(struct.pack("!I", addr))
+    b = a.split(".")
+    c = "{}.{}.{}.0/24".format(b[0], b[1], b[2])
+    return c
 
 
 def dist_update_all(r):
@@ -417,7 +425,7 @@ def draw_router_loc(r, path, img_idx):
         ctx.set_font_size(8)
         ctx.set_source_rgba(0.5, 1, 0.7, 0.5)
         ctx.move_to(x + 10, y + 20)
-        ctx.show_text(router.prefix)
+        ctx.show_text(router.prefix_v4)
 
     full_path = os.path.join(path, "{0:05}.png".format(img_idx))
     surface.write_to_png(full_path)
@@ -540,9 +548,8 @@ def main():
 
     r = dict()
     for i in range(NO_ROUTER):
-        prefix = rand_ip_prefix()
-        print(prefix)
-        r[i] = Router(i, ti, prefix)
+        prefix_v4 = rand_ip_prefix('v4')
+        r[i] = Router(i, ti, prefix_v4)
 
     # initial positioning
     dist_update_all(r)
