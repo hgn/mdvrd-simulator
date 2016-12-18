@@ -41,7 +41,12 @@ random.seed(1)
 # statitics variables follows
 NEIGHBOR_INFO_ACTIVE = 0
 
-LOGPATH = "logs"
+PATH_LOGS = "logs"
+PATH_IMAGES_RANGE = "images-range"
+PATH_IMAGES_TX    = "images-tx"
+PATH_IMAGES_MERGE = "images-merge"
+
+
 
 
 class Router:
@@ -58,6 +63,7 @@ class Router:
             self.direction_y = random.randint(0, 2)
             self.velocity = random.randint(1, 1)
 
+
         def _move_x(self, x):
             if self.direction_x == Router.MobilityModel.LEFT:
                 x -= self.velocity
@@ -73,6 +79,7 @@ class Router:
                 pass
             return x
 
+
         def _move_y(self, y):
             if self.direction_y == Router.MobilityModel.DOWNWARDS:
                 y += self.velocity
@@ -87,6 +94,7 @@ class Router:
             else:
                 pass
             return y
+
 
         def move(self, x, y):
             x = self._move_x(x)
@@ -112,13 +120,16 @@ class Router:
         for interface in ti:
             self.route_rx_data[interface['path_type']] = dict()
 
+
     def _log(self, msg):
         msg = "{:5}: {}\n".format(self.time, msg)
         self._log_fd.write(msg)
 
+
     def _init_log(self):
-        file_path = os.path.join(LOGPATH, "{0:05}.log".format(self.id))
+        file_path = os.path.join(PATH_LOGS, "{0:05}.log".format(self.id))
         self._log_fd = open(file_path, 'w')
+
 
     def _cmp_dicts(self, dict1, dict2):
         if dict1 == None or dict2 == None: return False
@@ -134,6 +145,7 @@ class Router:
                 eq = eq and (dict1[key] == dict2[key])
         return eq
 
+
     def _cmp_packets(self, packet1, packet2):
         p1 = copy.deepcopy(packet1)
         p2 = copy.deepcopy(packet2)
@@ -147,11 +159,14 @@ class Router:
     def _calc_next_tx_time(self):
             self._next_tx_time = self.time + TX_INTERVAL + random.randint(0, TX_INTERVAL_JITTER)
 
+
     def _sequence_no(self, path_type):
         return self.terminals[path_type].sequence_no
 
+
     def _sequence_no_inc(self, path_type):
         self.terminals[path_type].sequence_no += 1
+
 
     def _init_terminals_data(self):
         self.terminals = addict.Dict()
@@ -164,6 +179,7 @@ class Router:
             # transmission interval, thus the sequence number is
             # incremented independently.
             self.terminals[t['path_type']].sequence_no = 0
+
 
     def dist_update(self, dist, other):
         """connect is just information base on distance
@@ -179,6 +195,7 @@ class Router:
                 #print("{} out of range: {} to {} - {} m".format(t, self.id, other.id, dist))
                 if other.id in self.terminals[t].connections:
                     del self.terminals[t].connections[other.id]
+
 
     def _rx_save_routing_data(self, sender, interface, packet):
         route_recalc_required = True
@@ -209,6 +226,7 @@ class Router:
         # will only recalculate when data has changed
         return route_recalc_required
 
+
     def _check_outdated_route_entries(self):
         route_recalc_required = False
         for interface, v in self.route_rx_data.items():
@@ -224,6 +242,7 @@ class Router:
                 global NEIGHBOR_INFO_ACTIVE
                 NEIGHBOR_INFO_ACTIVE -= 1
         return route_recalc_required
+
 
     def _recalculate_routing_table(self):
         self._log("recalculate routing table")
@@ -245,12 +264,14 @@ class Router:
         # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
         # }
 
+
     def rx_route_packet(self, sender, interface, packet):
         msg = "rx route packet from {}, interface:{}, seq-no:{}"
         self._log(msg.format(sender.id, interface, packet['sequence-no']))
         route_recalc_required = self._rx_save_routing_data(sender, interface, packet)
         if route_recalc_required:
             self._recalculate_routing_table()
+
 
     def create_routing_packet(self, path_type):
         packet = dict()
@@ -262,6 +283,7 @@ class Router:
         packet['networks'] = list()
         packet['networks'].append({"v4-prefix" : self.prefix})
         return packet
+
 
     def tx_route_packet(self):
         # depending on local information the route
@@ -304,6 +326,7 @@ class Router:
     def pos(self):
         return self.pos_x, self.pos_y
 
+
     def step(self):
         self.time += 1
         self.pos_x, self.pos_y = self.mm.move(self.pos_x, self.pos_y)
@@ -325,6 +348,7 @@ def rand_ip_prefix():
 	b = a.split(".")
 	c = "{}.{}.{}.0/24".format(b[0], b[1], b[2])
 	return c
+
 
 def dist_update_all(r):
     for i in range(NO_ROUTER):
@@ -369,7 +393,6 @@ def draw_router_loc(r, path, img_idx):
                 ctx.set_source_rgba(*c_links[path_type])
                 ctx.line_to(other_x, other_y)
                 ctx.stroke()
-
             path_thinkness -= 2.0
 
     for i in range(NO_ROUTER):
@@ -419,7 +442,6 @@ def draw_router_transmission(r, path, img_idx):
             ctx.arc(x, y, 50, 0, 2 * math.pi)
             ctx.fill()
 
-
     for i in range(NO_ROUTER):
         router = r[i]
         x = router.pos_x
@@ -446,7 +468,6 @@ def draw_router_transmission(r, path, img_idx):
             if path_thinkness < 2.0:
                 path_thinkness = 2.0
 
-
     # draw dots over all
     for i in range(NO_ROUTER):
         router = r[i]
@@ -459,9 +480,9 @@ def draw_router_transmission(r, path, img_idx):
         ctx.arc(x, y, 5, 0, 2 * math.pi)
         ctx.fill()
 
-
     full_path = os.path.join(path, "{0:05}.png".format(img_idx))
     surface.write_to_png(full_path)
+
 
 def image_merge(merge_path, range_path, tx_path, img_idx):
 
@@ -480,22 +501,19 @@ def image_merge(merge_path, range_path, tx_path, img_idx):
     new_im.save(m_path, "PNG")
 
 
-PATH_IMAGES_RANGE = "images-range"
-PATH_IMAGES_TX    = "images-tx"
-PATH_IMAGES_MERGE = "images-merge"
-
-
 def draw_images(r, img_idx):
     draw_router_loc(r, PATH_IMAGES_RANGE, img_idx)
     draw_router_transmission(r, PATH_IMAGES_TX, img_idx)
 
     image_merge(PATH_IMAGES_MERGE, PATH_IMAGES_RANGE, PATH_IMAGES_TX, img_idx)
 
+
 def setup_img_folder():
     for path in (PATH_IMAGES_RANGE, PATH_IMAGES_TX, PATH_IMAGES_MERGE):
         if os.path.exists(path):
             shutil.rmtree(path)
         os.makedirs(path)
+
 
 def gen_data_packet(src_id, dst_id, tos='low-loss'):
     packet = addict.Dict()
@@ -506,10 +524,12 @@ def gen_data_packet(src_id, dst_id, tos='low-loss'):
     packet.tos = tos
     return packet
 
+
 def setup_log_folder():
-    if os.path.exists(LOGPATH):
-        shutil.rmtree(LOGPATH)
-    os.makedirs(LOGPATH)
+    if os.path.exists(PATH_LOGS):
+        shutil.rmtree(PATH_LOGS)
+    os.makedirs(PATH_LOGS)
+
 
 def main():
     setup_img_folder()
