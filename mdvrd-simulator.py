@@ -147,9 +147,15 @@ class Router:
         eq = True
         for key in dict1.keys():
             if type(dict1[key]) is dict:
-                eq = eq and compare_dictionaries(dict1[key],dict2[key])
+                if key not in dict2:
+                    return False
+                else:
+                    eq = eq and self._cmp_dicts(dict1[key], dict2[key])
             else:
-                eq = eq and (dict1[key] == dict2[key])
+                if key not in dict2:
+                    return False
+                else:
+                    eq = eq and (dict1[key] == dict2[key])
         return eq
 
 
@@ -232,7 +238,7 @@ class Router:
         #self.route_rx_data[interface][sender.id]['packet'] = packet
         #self.route_rx_data[interface]={"{}".format(sender.id):{'rx-time':self.time,
         #                                                       'packet':packet}}
-        pprint.pprint(self.route_rx_data)
+        #pprint.pprint(self.route_rx_data)
 
         # for now recalculate route table at every received packet, later we
         # will only recalculate when data has changed
@@ -258,22 +264,16 @@ class Router:
 
     def _recalculate_routing_table(self):
         self._log("recalculate routing table")
-        # this function is called when
-        # a) a new routing packet is received from one of our neighbors
-        # b) a particular routing information is outdated and removed from
-        #    self.route_rx_data
-        # if you have a packet for id 200, then you have one possibility via 23 via interface "wifi00
-        # self.fib["200"] = {
-        # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
-        # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
-        # }]
-        # self.fib["20"] = {
-        # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
-        # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
-        # }        # self.fib["23"] = {
-        # 			"highest-bandwidth": { "next-hop-id" : "direct", "interface" : "wifi00"  },
-        # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
-        # }
+        self.fib = dict()
+        self.compressedloss=dict()
+        self.compressedBW=dict()
+        self.fib['low_loss'] = dict()
+        self.fib['high_bandwidth'] = dict()
+        self.neigh_routing_paths = dict()
+        self.neigh_routing_paths['neighs']=dict()
+        self.neigh_routing_paths['othernode_paths']=dict()
+        self._calc_neigh_routing_paths()
+        self._calc_fib()
 
 
     def rx_route_packet(self, sender, interface, packet):
@@ -300,7 +300,7 @@ class Router:
                         lookup_data['full_path']=value_dest[self.id]['paths']
 
             else:
-                 print('path to {} is not available with this pathtype'.format(dest_id))
+                 self._log('path to {} is not available with this pathtype'.format(dest_id))
 
 
     def _calc_neigh_routing_paths(self):
@@ -309,7 +309,7 @@ class Router:
                 self._add_all_neighs(key_i,value_i,key_s,value_s)
                 if len(value_s['packet']['routingpaths'])>0:
                    self._add_all_othernodes(key_i,value_i,key_s,value_s)
-        pprint.pprint(self.neigh_routing_paths)
+        self._log(pprint.pformat(self.neigh_routing_paths))
 
     def _add_all_neighs(self,key_i,value_i,key_s,value_s):
         found_neigh = False
@@ -340,16 +340,16 @@ class Router:
                       found_dest=False
                       for key_dest_r,value_dest_r in value_path.items():
                           if key_dest_r==self_id:
-                             print("skip self routing",key_dest_r,self_id)
-                             pprint.pprint(value_dest_r)
+                             self._log("skip self routing {} {}".format(key_dest_r,self_id))
+                             self._log(pprint.pformat(value_dest_r))
                           else:
                                for key_dest_n,value_dest_n in value_pathtype.items():
                                    if key_dest_r==key_dest_n:
                                       found_node=False
                                       for key_send,value_send in value_dest_r.items():
                                           if key_send==self_id:
-                                             print("Existing neighbour",key_send,self_id)
-                                             pprint.pprint(value_send)
+                                             self._log("Existing neighbour {} {}".format(key_send,self_id))
+                                             self._log(pprint.pformat(value_send))
                                           else:
                                                for key_node,value_node in value_dest_n.items():
                                                    if key_send == key_node:
@@ -369,9 +369,8 @@ class Router:
                   self.neigh_routing_paths['othernode_paths'][key_path]=value_path
 
         else:
-             print('Adding first entry')
+             self._log('Adding first entry')
              self.neigh_routing_paths['othernode_paths'] = value_s['packet']['routingpaths']
-             pprint.pprint(self.neigh_routing_paths['othernode_paths'])
 
     def _add_neigh_entries(self, key_s, key_i, value_s):
         self.neigh_routing_paths['neighs'][key_s] ={'next-hop':self.id,
@@ -401,7 +400,7 @@ class Router:
         if len(self.neigh_routing_paths['othernode_paths'])>0:
            self._calc_shortestpath_loss(G,nx)
            self._calc_widestpath_BW(G,nx)
-        pprint.pprint(self.fib)
+        self._log(pprint.pformat(self.fib))
 
     def _calc_shortestpath_loss(self,G,nx):
         self_id=str(self.id)
@@ -410,25 +409,22 @@ class Router:
             for key_path,value_path in value_neigh[self_id]['paths'].items():
                 for key_weigh,value_weigh in value_path.items():
                      G.add_edge(key_neigh,self_id,weight=value_weigh)
-                     print(self_id,key_neigh,value_weigh)
         for key_dest,value_dest in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
             for key_node,value_node in value_dest.items():
                 if key_node==self_id:
-                   print("it knows the route only through me so ignore to avoid looping")
+                   self._log("it knows the route only through me so ignore to avoid looping")
                 else:
                      for key_path,value_path in value_node['paths'].items():
                          for key_loss,value_loss in value_path.items():
                              if key_path[0]==self_id:
-                                print("it knows the route only through me so ignore to avoid looping")
+                                self._log("it knows the route only through me so ignore to avoid looping")
                              else:
                                   G.add_edge(key_path[3],key_path[0],weight=value_loss)
-                                  print(key_path[0],key_path[3],value_loss)
             dest_array.append(key_dest)
-        print(dest_array)
         for dest in dest_array:
             path_array=list()
             if self_id==dest:
-               print('source and target are same',self_id,dest)
+               self._log('source and target are same {}-{}'.format(self_id,dest))
             else:
                  try:
                      path_array = nx.shortest_path(G, dest, self_id, weight='weight')
@@ -472,25 +468,24 @@ class Router:
             for key_path,value_path in value_neigh[self_id]['paths'].items():
                 for key_weigh,value_weigh in value_path.items():
                     G.add_edge(key_neigh,self_id,weight=value_weigh)
-                    print(self_id,key_neigh,value_weigh)
         for key_dest,value_dest in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
             for key_node,value_node in value_dest.items():
                 if key_node==self_id:
-                   print("it knows the route only through me so ignore to avoid looping")
+                   self._log("it knows the route only through me so ignore to avoid looping")
                 else:
                      for key_path,value_path in value_node['paths'].items():
                          for key_loss,value_loss in value_path.items():
                              if key_path[0]==self_id:
-                                print("it knows the route only through me so ignore to avoid looping")
+                                self._log("it knows the route only through me so ignore to avoid looping")
                              else:
                                 G.add_edge(key_path[3],key_path[0],weight=value_loss)
-                                print(key_path[0],key_path[3],value_loss)
+                                self._log("{} {} {}".format(key_path[0],key_path[3],value_loss))
             dest_array.append(key_dest)
-        print(dest_array)
+        self._log(dest_array)
         for dest in dest_array:
             path_array=list()
             if self_id==dest:
-               print('source and target are same',self_id,dest)
+               self._log('source and target are same {} {}'.format(self_id,dest))
             else:
                  try:
                      path_array = nx.shortest_path(G, dest, self_id, weight='weight')
@@ -528,7 +523,6 @@ class Router:
     def add_fib_lowloss_neighs(self):
         if len(self.fib['low_loss'])>0:
            found_dest=False
-           pprint.pprint(self.compressedloss)
            for key_node,value_node in self.compressedloss.items():
                for key_dest,value_dest in self.fib['low_loss'].items():
                    if key_dest==key_node:
@@ -604,24 +598,15 @@ class Router:
                            bandwidth_dict[key_path]=value_path['bandwidth']
                         break
          return bandwidth_dict
-        
+
 
     def rx_route_packet(self, sender, interface, packet):
-        print("{} receive routing protocol packet from {}".format(self.id, sender.id))
-        print("  rx interface: {}".format(interface))
-        print("  path_type:    {}".format(packet['path_type']))
+        msg = "rx route packet from {}, interface:{}, seq-no:{}"
+        self._log(msg.format(sender.id, interface, packet['sequence-no']))
        # pprint.pprint(packet)
-        self.fib = dict()
-        self.compressedloss=dict()
-        self.compressedBW=dict()
-        self.fib['low_loss'] = dict()
-        self.fib['high_bandwidth'] = dict()
-        self.neigh_routing_paths = dict()
-        self.neigh_routing_paths['neighs']=dict()
-        self.neigh_routing_paths['othernode_paths']=dict()
-        self._rx_save_routing_data(sender, interface, packet)
-        self._calc_neigh_routing_paths()
-        self._calc_fib()
+        route_recalc_required = self._rx_save_routing_data(sender, interface, packet)
+        if route_recalc_required:
+            self._recalculate_routing_table()
 
     def create_routing_packet(self, path_type):
         packet = dict()
