@@ -21,7 +21,7 @@ from PIL import Image
 
 
 
-NO_ROUTER = 100
+NO_ROUTER = 6
 
 SIMULATION_TIME_SEC = 60 * 60
 
@@ -30,8 +30,9 @@ TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 DEAD_INTERVAL = TX_INTERVAL * 3 + 1
 
 # two stiched images result in 1080p resoltion
-SIMU_AREA_X = 960
-SIMU_AREA_Y = 1080
+SIMU_AREA_X = 100 # 960
+SIMU_AREA_Y = 100 
+# 1080
 
 DEFAULT_PACKET_TTL = 32
 
@@ -103,7 +104,14 @@ class Router:
         self._calc_next_tx_time()
         self.mm = Router.MobilityModel()
         self.transmitted_now = False
-
+        self.fib = dict()
+        #self.compressedloss=dict()
+        #self.compressedBW=dict()
+        #self.fib['low_loss'] = dict()
+        #self.fib['high_bandwidth'] = dict()
+        #self.neigh_routing_paths = dict()
+        #self.neigh_routing_paths['neighs']=dict()
+        #self.neigh_routing_paths['othernode_paths']=dict()        
         self.route_rx_data = dict()
         for interface in ti:
             self.route_rx_data[interface['path_type']] = dict()
@@ -121,7 +129,7 @@ class Router:
 
     def dist_update(self, dist, other):
         """connect is just information base on distance
-           path loss or other effects are modeled afterwards.
+-           path loss or other effects are modeled afterwards.
            This models the PHY channel somehow."""
         for v in self.ti:
             t = v['path_type']
@@ -139,8 +147,11 @@ class Router:
             self.route_rx_data[interface][sender.id] = dict()
             global NEIGHBOR_INFO_ACTIVE
             NEIGHBOR_INFO_ACTIVE += 1
-        self.route_rx_data[interface][sender.id]['rx-time'] = self.time
-        self.route_rx_data[interface][sender.id]['packet'] = packet
+        #self.route_rx_data[interface][sender.id]['rx-time'] = self.time
+        #self.route_rx_data[interface][sender.id]['packet'] = packet
+        self.route_rx_data[interface]={"{}".format(sender.id):{'rx-time':self.time,
+                                                               'packet':packet}}
+        pprint.pprint(self.route_rx_data)
 
     def _check_outdated_route_entries(self):
         for interface, v in self.route_rx_data.items():
@@ -164,31 +175,364 @@ class Router:
         # self.fib["200"] = {
         # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
         # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
-        # }
+        # }]
         # self.fib["20"] = {
         # 			"highest-bandwidth": { "next-hop-id" : 23, "interface" : "wifi00"  },
         # 			"lowest-loss": { "next-hop-id" : 23, "interface" : "tetra00"  }
-        # }
-        # self.fib["23"] = {
+        # }        # self.fib["23"] = {
         # 			"highest-bandwidth": { "next-hop-id" : "direct", "interface" : "wifi00"  },
         # 			"lowest-loss": { "next-hop-id" : "direct", "interface" : "tetra00"  }
         # }
-        pass
+        pprint.pprint(self.neigh_routing_paths)
+
+    def _lookup(self,dest_id,pathtype):
+        lookup_data=dict()
+        self_id=str(self.id)
+        for key_dest,value_dest in self.fib[pathtype].items():
+            if key_dest==dest_id:
+               lookup_data['next-hop']=value_dest[self.id]['next-hop']
+               lookup_data['dest_network']=list()
+               lookup_data['dest_network']=value_dest[self.id]['networks']
+               for key_path, value_path in value_dest[self.id]:
+                   if key_path=='full_path':
+                      lookup_data['full_path']=list()
+                      lookup_data['full_path']=value_path
+                   else:
+                        lookup_data['full_path']=value_dest[self.id]['paths']
+
+            else:
+                 print('path to {} is not available with this pathtype'.format(dest_id))
+
+
+    def _calc_neigh_routing_paths(self):
+        for key_i,value_i in self.route_rx_data.items():
+            for key_s,value_s in value_i.items():
+                self._add_all_neighs(key_i,value_i,key_s,value_s)
+                if len(value_s['packet']['routingpaths'])>0:
+                   self._add_all_othernodes(key_i,value_i,key_s,value_s)
+        pprint.pprint(self.neigh_routing_paths)
+
+    def _add_all_neighs(self,key_i,value_i,key_s,value_s):
+        found_neigh = False
+        if len(self.neigh_routing_paths['neighs']) > 0:
+           for key_r,value_r in self.neigh_routing_paths['neighs'].items():
+               if key_r == key_s:
+                  path_found = False
+                  for valuevalue_r in value_r['paths']["{}->{}".format(self.id,key_r)]:
+                      if valuevalue_r == key_i:
+                         path_found = True
+                         break
+                  if path_found == False:
+                     value_r['paths']["{}->{}".format(self.id,key_r)].append(key_i)
+                  found_neigh = True
+                  break
+           if found_neigh == False:
+              self._add_neigh_entries(key_s, key_i, value_s)
+        else:
+            self._add_neigh_entries(key_s, key_i, value_s)
+
+    def _add_all_othernodes(self,key_i,value_i,key_s,value_s):
+        self_id=str(self.id)
+        if len(self.neigh_routing_paths['othernode_paths']) > 0:
+           found_pathtype=False
+           for key_path,value_path in value_s['packet']['routingpaths'].items():
+               for key_pathtype,value_pathtype in self.neigh_routing_paths['othernode_paths'].items():
+                   if key_path == key_pathtype:
+                      found_dest=False
+                      for key_dest_r,value_dest_r in value_path.items():
+                          if key_dest_r==self_id:
+                             print("skip self routing",key_dest_r,self_id)
+                             pprint.pprint(value_dest_r)
+                          else:
+                               for key_dest_n,value_dest_n in value_pathtype.items():
+                                   if key_dest_r==key_dest_n:
+                                      found_node=False
+                                      for key_send,value_send in value_dest_r.items():
+                                          if key_send==self_id:
+                                             print("Existing neighbour",key_send,self_id)
+                                             pprint.pprint(value_send)
+                                          else:
+                                               for key_node,value_node in value_dest_n.items():
+                                                   if key_send == key_node:
+                                                      value_node = dict()
+                                                      value_node=value_send
+                                                      found_node=True
+                                                      break
+                                               if found_node==False:
+                                                  value_dest_n[key_send]=value_send
+                                      found_dest=True
+                                      break
+                               if found_dest==False:
+                                  value_pathtype[key_dest_r]=value_dest_r
+                      found_pathtype=True
+                      break
+               if found_pathtype==False:
+                  self.neigh_routing_paths['othernode_paths'][key_path]=value_path
+
+        else:
+             print('Adding first entry')
+             self.neigh_routing_paths['othernode_paths'] = value_s['packet']['routingpaths']
+             pprint.pprint(self.neigh_routing_paths['othernode_paths'])
+
+    def _add_neigh_entries(self, key_s, key_i, value_s):
+        self.neigh_routing_paths['neighs'][key_s] ={'next-hop':self.id,
+                                                'networks':value_s['packet']['networks'],
+                                                 'paths':{"{}->{}".format(self.id,key_s):[key_i]}
+                                               }
+        #self.neigh_routing_paths['othernode_paths']=dict()
+        #self.neigh_routing_paths['othernode_paths'] = value_s['packet']['routingpaths']
+
+        self.neigh_routing_paths['paths']=dict()
+        for p in self.ti:
+            self.neigh_routing_paths['paths'][p['path_type']] = {'loss':p['loss'],
+                                                                  'bandwidth':p['bandwidth']
+                                                                }
+    def _calc_fib(self):
+        import networkx as nx
+        G = nx.Graph()
+        weigh_loss = dict()
+        weigh_bandwidth = dict()
+        for key_n,value_n in self.neigh_routing_paths['neighs'].items():
+            weigh_loss = self._loss_path_compression(key_n,value_n)
+            weigh_bandwidth = self._bandwidth_path_compression(key_n,value_n)
+            self.add_loss_entry(key_n,value_n,weigh_loss)
+            self.add_bandwidth_entry(key_n,value_n,weigh_bandwidth)
+        self.add_fib_lowloss_neighs()
+        self.add_fib_highBW_neighs()
+        if len(self.neigh_routing_paths['othernode_paths'])>0:
+           self._calc_shortestpath_loss(G,nx)
+           self._calc_widestpath_BW(G,nx)
+        pprint.pprint(self.fib)
+
+    def _calc_shortestpath_loss(self,G,nx):
+        self_id=str(self.id)
+        dest_array=list()
+        for key_neigh,value_neigh in self.compressedloss.items():
+            for key_path,value_path in value_neigh[self_id]['paths'].items():
+                for key_weigh,value_weigh in value_path.items():
+                     G.add_edge(key_neigh,self_id,weight=value_weigh)
+                     print(self_id,key_neigh,value_weigh)
+        for key_dest,value_dest in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
+            for key_node,value_node in value_dest.items():
+                if key_node==self_id:
+                   print("it knows the route only through me so ignore to avoid looping")
+                else:
+                     for key_path,value_path in value_node['paths'].items():
+                         for key_loss,value_loss in value_path.items():
+                             if key_path[0]==self_id:
+                                print("it knows the route only through me so ignore to avoid looping")
+                             else:
+                                  G.add_edge(key_path[3],key_path[0],weight=value_loss)
+                                  print(key_path[0],key_path[3],value_loss)
+            dest_array.append(key_dest)
+        print(dest_array)
+        for dest in dest_array:
+            path_array=list()
+            if self_id==dest:
+               print('source and target are same',self_id,dest)
+            else:
+                 try:
+                     path_array = nx.shortest_path(G, dest, self_id, weight='weight')
+                 except KeyError:
+                     continue
+                 except nx.exception.NetworkXNoPath:
+                     continue
+                 if len(path_array)>2:
+                     self.add_shortestloss_path(path_array,self_id)
+
+    def add_shortestloss_path(self,path_array,self_id):
+        next_hop_index=(len(path_array))-2
+        full_path=path_array[::-1]
+        self.fib['low_loss'][path_array[0]]={"{}".format(self.id):{'next-hop':path_array[next_hop_index],
+                                                                   'full_path':full_path}}
+
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['low_loss'][path_array[0]].items():
+            self.fib['low_loss'][path_array[0]][self_id]['networks']=list()
+            self.fib['low_loss'][path_array[0]][self_id]['networks']=value_i['networks']
+            break
+        self.fib['low_loss'][path_array[0]][self_id]['paths']=dict()
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
+            if key_i==path_array[0]:
+                for key_j,value_j in value_i.items():
+                    if key_j==path_array[next_hop_index]:
+                        self.fib['low_loss'][path_array[0]][self_id]['paths']=value_j['paths']
+                        break
+                break
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
+            if key_i==path_array[next_hop_index]:
+               for key_j,value_j in value_i.items():
+                   if key_j==path_array[0]:
+                      self.fib['low_loss'][path_array[0]][self_id]['paths']=value_j['paths']
+                      break
+               break
+
+    def _calc_widestpath_BW(self,G,nx):
+        self_id=str(self.id)
+        dest_array=list()
+        for key_neigh,value_neigh in self.compressedBW.items():
+            for key_path,value_path in value_neigh[self_id]['paths'].items():
+                for key_weigh,value_weigh in value_path.items():
+                    G.add_edge(key_neigh,self_id,weight=value_weigh)
+                    print(self_id,key_neigh,value_weigh)
+        for key_dest,value_dest in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
+            for key_node,value_node in value_dest.items():
+                if key_node==self_id:
+                   print("it knows the route only through me so ignore to avoid looping")
+                else:
+                     for key_path,value_path in value_node['paths'].items():
+                         for key_loss,value_loss in value_path.items():
+                             if key_path[0]==self_id:
+                                print("it knows the route only through me so ignore to avoid looping")
+                             else:
+                                G.add_edge(key_path[3],key_path[0],weight=value_loss)
+                                print(key_path[0],key_path[3],value_loss)
+            dest_array.append(key_dest)
+        print(dest_array)
+        for dest in dest_array:
+            path_array=list()
+            if self_id==dest:
+               print('source and target are same',self_id,dest)
+            else:
+                 try:
+                     path_array = nx.shortest_path(G, dest, self_id, weight='weight')
+                 except KeyError:
+                     continue
+                 except nx.exception.NetworkXNoPath:
+                     continue
+                 if len(path_array)>2:                                                                                                                      self.add_widestBW_path(path_array,self_id)
+
+    def add_widestBW_path(self,path_array,self_id):
+        next_hop_index=(len(path_array))-2
+        full_path=path_array[::-1]
+        self.fib['high_bandwidth'][path_array[0]]={"{}".format(self.id):{'next-hop':path_array[next_hop_index],
+                                                                         'full_path':full_path}}
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['high_bandwidth'][path_array[0]].items():
+            self.fib['high_bandwidth'][path_array[0]][self_id]['networks']=list()
+            self.fib['high_bandwidth'][path_array[0]][self_id]['networks']=value_i['networks']
+            break
+        self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=dict()
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
+            if key_i==path_array[0]:
+               for key_j,value_j in value_i.items():
+                   if key_j==path_array[next_hop_index]:
+                      self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=value_j['paths']
+                      break
+               break
+        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
+            if key_i==path_array[next_hop_index]:
+               for key_j,value_j in value_i.items():
+                   if key_j==path_array[0]:
+                      self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=value_j['paths']
+                      break
+               break
+
+    def add_fib_lowloss_neighs(self):
+        if len(self.fib['low_loss'])>0:
+           found_dest=False
+           pprint.pprint(self.compressedloss)
+           for key_node,value_node in self.compressedloss.items():
+               for key_dest,value_dest in self.fib['low_loss'].items():
+                   if key_dest==key_node:
+                      value_dest=dict()
+                      value_dest=value_node
+                      found_dest=True
+                      break
+               if found_dest==False:
+                  self.fib['low_loss'][key_node]=value_node
+        else:
+             self.fib['low_loss']=self.compressedloss
+
+    def add_fib_highBW_neighs(self):
+        if len(self.fib['high_bandwidth'])>0:
+           found_dest=False
+           for key_node,value_node in self.compressedloss.items():
+               for key_dest,value_dest in self.fib['high_bandwidth'].items():
+                   if key_dest==key_node:
+                      value_dest=dict()
+                      value_dest=value_node
+                      found_dest=True
+                      break
+               if found_dest==False:
+                  self.fib['high_bandwidth'][key_node]=value_node
+        else:
+             self.fib['high_bandwidth']=self.compressedBW
+
+        #pprint.pprint(self.compressedloss)
+        #pprint.pprint(self.compressedBW)
+
+    def add_loss_entry(self,key_n,value_n,weigh_loss):
+        self.compressedloss[key_n]={"{}".format(self.id):{'next-hop':value_n['next-hop'],
+                                     'networks':value_n['networks'],
+                                     'paths':{"{}->{}".format(self.id,key_n):dict()},
+                                     'paths':{"{}->{}".format(self.id,key_n):weigh_loss}
+                                     }}
+
+    def add_bandwidth_entry(self,key_n,value_n,weigh_bandwidth):
+        self.compressedBW[key_n]={"{}".format(self.id):{'next-hop':value_n['next-hop'],
+                                           'networks':value_n['networks'],
+                                           'paths':{"{}->{}".format(self.id,key_n):dict()},
+                                           'paths':{"{}->{}".format(self.id,key_n):weigh_bandwidth}
+                                           }}
+
+    def _loss_path_compression(self,key_n,value_n):
+         loss_dict = dict()
+         for key,value in value_n['paths'].items():
+             for valuevalue in value:
+                 for key_path,value_path in self.neigh_routing_paths['paths'].items():
+                     if key_path==valuevalue:
+                        if len(loss_dict)>0:
+                           for key_l,value_l in loss_dict.items():
+                               if value_path['loss']<value_l:
+                                  loss_dict=dict()
+                                  loss_dict[key_path]=value_path['loss']
+                        else:
+                           loss_dict[key_path]=value_path['loss']
+                        break
+         return loss_dict
+
+    def _bandwidth_path_compression(self,key_n,value_n):
+         bandwidth_dict = dict()
+         for key,value in value_n['paths'].items():
+             for valuevalue in value:
+                 for key_path,value_path in self.neigh_routing_paths['paths'].items():
+                     if key_path==valuevalue:
+                        if len(bandwidth_dict)>0:
+                           for key_l,value_l in bandwidth_dict.items():
+                               if value_path['bandwidth']>value_l:
+                                  bandwidth_dict=dict()
+                                  bandwidth_dict[key_path]=value_path['bandwidth']
+                        else:
+                           bandwidth_dict[key_path]=value_path['bandwidth']
+                        break
+         return bandwidth_dict
+        
 
     def rx_route_packet(self, sender, interface, packet):
         print("{} receive routing protocol packet from {}".format(self.id, sender.id))
         print("  rx interface: {}".format(interface))
         print("  path_type:    {}".format(packet['path_type']))
-        #pprint.pprint(packet)
+       # pprint.pprint(packet)
+        self.fib = dict()
+        self.compressedloss=dict()
+        self.compressedBW=dict()
+        self.fib['low_loss'] = dict()
+        self.fib['high_bandwidth'] = dict()
+        self.neigh_routing_paths = dict()
+        self.neigh_routing_paths['neighs']=dict()
+        self.neigh_routing_paths['othernode_paths']=dict()
         self._rx_save_routing_data(sender, interface, packet)
-        self._recalculate_routing_table()
+        self._calc_neigh_routing_paths()
+        self._calc_fib()
 
     def create_routing_packet(self, path_type):
         packet = dict()
+        packet['routingpaths'] = dict()
         packet['router-id'] = self.id
         packet['path_type'] = path_type
         packet['networks'] = list()
         packet['networks'].append({"v4-prefix" : self.prefix})
+        if len(self.fib)>0:
+           packet['routingpaths']=self.fib
         return packet
 
     def tx_route_packet(self):
@@ -429,10 +773,12 @@ def gen_data_packet():
     return packet
 
 def main():
-    setup_img_folder()
+    #setup_img_folder()
 
-    ti = [ {"path_type": "wifi00", "range" : 100, "bandwidth" : 5000},
-           {"path_type": "tetra00", "range" : 150, "bandwidth" : 1000 } ]
+    ti = [ {"path_type": "2", "range" : 50, "bandwidth" : 10000, "loss" : 20},
+           {"path_type": "1", "range" : 200, "bandwidth" : 1000, "loss" : 5 },
+           {"path_type": "4", "range" : 100, "bandwidth" : 30000, "loss" : 30},
+           {"path_type": "3", "range" : 300, "bandwidth" : 2000, "loss" : 10 }  ]
 
     r = dict()
     for i in range(NO_ROUTER):
@@ -449,7 +795,7 @@ def main():
         for i in range(NO_ROUTER):
             r[i].step()
         dist_update_all(r)
-        draw_images(r, sec)
+        #draw_images(r, sec)
         # inject data packet into network
         packet = gen_data_packet()
         r[packet.src_id].forward_data_packet(packet)
