@@ -22,7 +22,7 @@ from PIL import Image
 
 
 
-NO_ROUTER = 6
+NO_ROUTER = 3
 
 SIMULATION_TIME_SEC = 60 * 60
 
@@ -31,11 +31,10 @@ TX_INTERVAL_JITTER = int(TX_INTERVAL / 4)
 DEAD_INTERVAL = TX_INTERVAL * 3 + 1
 
 # two stiched images result in 1080p resoltion
-SIMU_AREA_X = 100 # 960
-SIMU_AREA_Y = 100 
-# 1080
+SIMU_AREA_X = 10 # 960
+SIMU_AREA_Y = 10 # 1080
 
-DEFAULT_PACKET_TTL = 32
+DEFAULT_PACKET_TTL = 16
 
 random.seed(1)
 
@@ -104,7 +103,7 @@ class Router:
 
 
     def __init__(self, id, ti, prefix_v4):
-        self.id = id
+        self.id = str(id)
         self._init_log()
         self.ti = ti
         self.prefix_v4 = prefix_v4
@@ -134,7 +133,7 @@ class Router:
 
 
     def _init_log(self):
-        file_path = os.path.join(PATH_LOGS, "{0:05}.log".format(self.id))
+        file_path = os.path.join(PATH_LOGS, "{0:05}.log".format(int(self.id)))
         self._log_fd = open(file_path, 'w')
 
 
@@ -238,7 +237,7 @@ class Router:
         #self.route_rx_data[interface][sender.id]['packet'] = packet
         #self.route_rx_data[interface]={"{}".format(sender.id):{'rx-time':self.time,
         #                                                       'packet':packet}}
-        #pprint.pprint(self.route_rx_data)
+        pprint.pprint(self.route_rx_data)
 
         # for now recalculate route table at every received packet, later we
         # will only recalculate when data has changed
@@ -290,38 +289,45 @@ class Router:
         lookup_data=dict()
         self_id=str(self.id)
         dest_found=False
+        self._log(pprint.pformat(self.fib))
+        #pprint.pprint(self.fib)
         for key_dest,value_dest in self.fib[pathtype].items():
             if key_dest==dest_id:
-               lookup_data['next-hop']=value_dest[self_id]['next-hop']
-               lookup_data['dest_network']=list()
-               lookup_data['dest_network']=value_dest[self_id]['networks']
-               fullpath_found=False
-               for key_path, value_path in value_dest[self_id].items():
-                   if key_path=='full_path':
-                      lookup_data['full_path']=list()
-                      lookup_data['full_path']=value_path
-                      fullpath_found=True
-                      break
-               if fullpath_found==False:
-                  lookup_data['full_path']=value_dest[self_id]['paths']
+               for key_self,value_self in value_dest.items():
+                   if key_self==self_id:
+                      lookup_data['next-hop']=value_self['next-hop']
+                      lookup_data['dest_network']=list()
+                      lookup_data['dest_network']=value_self['networks']
+                      fullpath_found=False
+                      for key_path, value_path in value_self.items():
+                          if key_path=='full_path':
+                             lookup_data['full_path']=list()
+                             lookup_data['full_path']=value_path
+                             fullpath_found=True
+                             break
+                      if fullpath_found==False:
+                         lookup_data['full_path']=value_self['paths']
                dest_found=True
                break
-
+        self._log(pprint.pformat(lookup_data))
+        #pprint.pprint(lookup_data)
         if len(lookup_data)<=0:
             return None, None
 
         for key_dest,value_dest in self.fib[pathtype].items():
                if key_dest==lookup_data['next-hop']:
-                  for key_i,value_i in value_dest[self_id]['paths'].items():
-                      for key_ii, value_ii in value_i.items():
-                          lookup_data['interface']=key_ii
-                  break
+                  for key_self,value_self in value_dest.items():
+                      if key_self==self_id:
+                         for key_i,value_i in value_self['paths'].items():
+                             for key_ii, value_ii in value_i.items():
+                                 lookup_data['interface']=key_ii
+                                 break
 
         if dest_found==False:
            self._log('path to {} is not available with this pathtype'.format(dest_id))
            return None, None
-        pprint.pprint(self.fib)
-        print(lookup_data['next-hop'],lookup_data['interface'])
+        #pprint.pprint(self.fib)
+        #print(lookup_data['next-hop'],lookup_data['interface'])
         return lookup_data['next-hop'],lookup_data['interface']
 
 
@@ -332,6 +338,7 @@ class Router:
                 if len(value_s['packet']['routingpaths'])>0:
                    self._add_all_othernodes(key_i,value_i,key_s,value_s)
         self._log(pprint.pformat(self.neigh_routing_paths))
+        pprint.pprint(self.neigh_routing_paths)
 
     def _add_all_neighs(self,key_i,value_i,key_s,value_s):
         found_neigh = False
@@ -399,8 +406,6 @@ class Router:
                                                 'networks':value_s['packet']['networks'],
                                                  'paths':{"{}->{}".format(self.id,key_s):[key_i]}
                                                }
-        #self.neigh_routing_paths['othernode_paths']=dict()
-        #self.neigh_routing_paths['othernode_paths'] = value_s['packet']['routingpaths']
 
         self.neigh_routing_paths['paths']=dict()
         for p in self.ti:
@@ -423,6 +428,7 @@ class Router:
            self._calc_shortestpath_loss(G,nx)
            self._calc_widestpath_BW(G,nx)
         self._log(pprint.pformat(self.fib))
+        pprint.pprint(self.fib)
 
     def _calc_shortestpath_loss(self,G,nx):
         self_id=str(self.id)
@@ -475,13 +481,14 @@ class Router:
                         self.fib['low_loss'][path_array[0]][self_id]['paths']=value_j['paths']
                         break
                 break
-        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
-            if key_i==path_array[next_hop_index]:
-               for key_j,value_j in value_i.items():
-                   if key_j==path_array[0]:
-                      self.fib['low_loss'][path_array[0]][self_id]['paths']=value_j['paths']
-                      break
-               break
+        #if len(self.fib['low_loss'][path_array[0]][self_id]['paths'])<1:
+           #for key_i,value_i in self.neigh_routing_paths['othernode_paths']['low_loss'].items():
+               #if key_i==path_array[next_hop_index]:
+                  #for key_j,value_j in value_i.items():
+                      #if key_j==path_array[0]:
+                         #self.fib['low_loss'][path_array[0]][self_id]['paths']=value_j['paths']
+                         #break
+                  #break
 
     def _calc_widestpath_BW(self,G,nx):
         self_id=str(self.id)
@@ -534,13 +541,14 @@ class Router:
                       self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=value_j['paths']
                       break
                break
-        for key_i,value_i in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
-            if key_i==path_array[next_hop_index]:
-               for key_j,value_j in value_i.items():
-                   if key_j==path_array[0]:
-                      self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=value_j['paths']
-                      break
-               break
+        #if len(self.fib['high_bandwidth'][path_array[0]][self_id]['paths'])<1:
+          # for key_i,value_i in self.neigh_routing_paths['othernode_paths']['high_bandwidth'].items():
+               #if key_i==path_array[next_hop_index]:
+                  #for key_j,value_j in value_i.items():
+                      #if key_j==path_array[0]:
+                        # self.fib['high_bandwidth'][path_array[0]][self_id]['paths']=value_j['paths']
+                         #break
+                  #break
 
     def add_fib_lowloss_neighs(self):
         if len(self.fib['low_loss'])>0:
@@ -625,7 +633,7 @@ class Router:
     def rx_route_packet(self, sender, interface, packet):
         msg = "rx route packet from {}, interface:{}, seq-no:{}"
         self._log(msg.format(sender.id, interface, packet['sequence-no']))
-       # pprint.pprint(packet)
+        #pprint.pprint(packet)
         route_recalc_required = self._rx_save_routing_data(sender, interface, packet)
         if route_recalc_required:
             self._recalculate_routing_table()
@@ -659,6 +667,10 @@ class Router:
 
 
     def forward_data_packet(self, packet):
+        packet.ttl -= 0
+        if packet.ttl <= 0:
+            print("TTL 0 reached, routing loop detected!!!")
+            return
         if packet.dst_id == self.id:
             print("REACHED DESTINATION")
             return
@@ -671,13 +683,15 @@ class Router:
         src_id = packet.src_id
         next_hop_addr,interface = self._lookup(str(dst_id), packet.tos)
         if next_hop_addr == None:
-            print("ICMP - no route to host, drop packet")
+            print("{}: ICMP - no route to host, drop packet".format(self.id))
             return
-        print("packet src:{} dst:{}".format(src_id, dst_id))
+        print("{}: packet src:{} dst:{}".format(self.id, src_id, dst_id))
         print("  current:{} nexthop: {}".format(self.id, next_hop_addr))
         print("  TOS: {} (packet prefered way)".format(packet.tos))
         # FIXME: use rx_data_packet() instead of ..forward_data_packet
-        pprint.pprint(self.terminals)
+        #print(interface)
+        #print(next_hop_addr)
+       # pprint.pprint(self.terminals)
         self.terminals[interface].connections[next_hop_addr].forward_data_packet(packet)
 
 
