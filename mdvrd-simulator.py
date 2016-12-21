@@ -22,7 +22,7 @@ from PIL import Image
 
 
 
-NO_ROUTER = 3
+NO_ROUTER = 50
 
 SIMULATION_TIME_SEC = 60 * 60
 
@@ -237,7 +237,7 @@ class Router:
         #self.route_rx_data[interface][sender.id]['packet'] = packet
         #self.route_rx_data[interface]={"{}".format(sender.id):{'rx-time':self.time,
         #                                                       'packet':packet}}
-        pprint.pprint(self.route_rx_data)
+        #pprint.pprint(self.route_rx_data)
 
         # for now recalculate route table at every received packet, later we
         # will only recalculate when data has changed
@@ -338,7 +338,7 @@ class Router:
                 if len(value_s['packet']['routingpaths'])>0:
                    self._add_all_othernodes(key_i,value_i,key_s,value_s)
         self._log(pprint.pformat(self.neigh_routing_paths))
-        pprint.pprint(self.neigh_routing_paths)
+        #pprint.pprint(self.neigh_routing_paths)
 
     def _add_all_neighs(self,key_i,value_i,key_s,value_s):
         found_neigh = False
@@ -428,7 +428,7 @@ class Router:
            self._calc_shortestpath_loss(G,nx)
            self._calc_widestpath_BW(G,nx)
         self._log(pprint.pformat(self.fib))
-        pprint.pprint(self.fib)
+        #pprint.pprint(self.fib)
 
     def _calc_shortestpath_loss(self,G,nx):
         self_id=str(self.id)
@@ -671,7 +671,7 @@ class Router:
         if packet.ttl <= 0:
             print("TTL 0 reached, routing loop detected!!!")
             return
-        if packet.dst_id == self.id:
+        if str(packet.dst_id) == str(self.id):
             print("REACHED DESTINATION")
             return
         # do a route FIB lookup to each dst_id
@@ -683,7 +683,7 @@ class Router:
         src_id = packet.src_id
         next_hop_addr,interface = self._lookup(str(dst_id), packet.tos)
         if next_hop_addr == None:
-            print("{}: ICMP - no route to host, drop packet".format(self.id))
+            print("{}: ICMP - no route to host for packet dst {}, drop packet".format(self.id, dst_id))
             return
         print("{}: packet src:{} dst:{}".format(self.id, src_id, dst_id))
         print("  current:{} nexthop: {}".format(self.id, next_hop_addr))
