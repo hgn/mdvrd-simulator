@@ -284,23 +284,45 @@ class Router:
             self._recalculate_routing_table()
 
 
-    def _lookup(self,dest_id,pathtype):
+    def _lookup(self, dest_id, pathtype):
+        if len(self.fib) < 1:
+            return None, None
         lookup_data=dict()
         self_id=str(self.id)
+        dest_found=False
         for key_dest,value_dest in self.fib[pathtype].items():
             if key_dest==dest_id:
-               lookup_data['next-hop']=value_dest[self.id]['next-hop']
+               lookup_data['next-hop']=value_dest[self_id]['next-hop']
                lookup_data['dest_network']=list()
-               lookup_data['dest_network']=value_dest[self.id]['networks']
-               for key_path, value_path in value_dest[self.id]:
+               lookup_data['dest_network']=value_dest[self_id]['networks']
+               fullpath_found=False
+               for key_path, value_path in value_dest[self_id].items():
                    if key_path=='full_path':
                       lookup_data['full_path']=list()
                       lookup_data['full_path']=value_path
-                   else:
-                        lookup_data['full_path']=value_dest[self.id]['paths']
+                      fullpath_found=True
+                      break
+               if fullpath_found==False:
+                  lookup_data['full_path']=value_dest[self_id]['paths']
+               dest_found=True
+               break
 
-            else:
-                 self._log('path to {} is not available with this pathtype'.format(dest_id))
+        if len(lookup_data)<=0:
+            return None, None
+
+        for key_dest,value_dest in self.fib[pathtype].items():
+               if key_dest==lookup_data['next-hop']:
+                  for key_i,value_i in value_dest[self_id]['paths'].items():
+                      for key_ii, value_ii in value_i.items():
+                          lookup_data['interface']=key_ii
+                  break
+
+        if dest_found==False:
+           self._log('path to {} is not available with this pathtype'.format(dest_id))
+           return None, None
+        pprint.pprint(self.fib)
+        print(lookup_data['next-hop'],lookup_data['interface'])
+        return lookup_data['next-hop'],lookup_data['interface']
 
 
     def _calc_neigh_routing_paths(self):
@@ -373,7 +395,7 @@ class Router:
              self.neigh_routing_paths['othernode_paths'] = value_s['packet']['routingpaths']
 
     def _add_neigh_entries(self, key_s, key_i, value_s):
-        self.neigh_routing_paths['neighs'][key_s] ={'next-hop':self.id,
+        self.neigh_routing_paths['neighs'][key_s] ={'next-hop':key_s,
                                                 'networks':value_s['packet']['networks'],
                                                  'paths':{"{}->{}".format(self.id,key_s):[key_i]}
                                                }
@@ -637,6 +659,9 @@ class Router:
 
 
     def forward_data_packet(self, packet):
+        if packet.dst_id == self.id:
+            print("REACHED DESTINATION")
+            return
         # do a route FIB lookup to each dst_id
         # and forward data to this router. If no
         # route can be found then
@@ -644,9 +669,17 @@ class Router:
         # b) route table has a bug
         dst_id = packet.dst_id
         src_id = packet.src_id
+        next_hop_addr,interface = self._lookup(str(dst_id), packet.tos)
+        if next_hop_addr == None:
+            print("ICMP - no route to host, drop packet")
+            return
         print("packet src:{} dst:{}".format(src_id, dst_id))
-        print("  current:{} nexthop:?".format(self.id))
+        print("  current:{} nexthop: {}".format(self.id, next_hop_addr))
         print("  TOS: {} (packet prefered way)".format(packet.tos))
+        # FIXME: use rx_data_packet() instead of ..forward_data_packet
+        pprint.pprint(self.terminals)
+        self.terminals[interface].connections[next_hop_addr].forward_data_packet(packet)
+
 
 
     def rx_data_packet(self, sender, interface, packet):
@@ -890,8 +923,8 @@ def main():
 
     src_id = random.randint(0, NO_ROUTER - 1)
     dst_id = random.randint(0, NO_ROUTER - 1)
-    packet_low_loss       = gen_data_packet(src_id, dst_id, tos='low-loss')
-    packet_high_througput = gen_data_packet(src_id, dst_id, tos='high-throughput')
+    packet_low_loss       = gen_data_packet(src_id, dst_id, tos='low_loss')
+    packet_high_througput = gen_data_packet(src_id, dst_id, tos='high_bandwidth')
     for sec in range(SIMULATION_TIME_SEC):
         sep = '=' * 50
         print("\n{}\nsimulation time:{:6}/{}\n".format(sep, sec, SIMULATION_TIME_SEC))
